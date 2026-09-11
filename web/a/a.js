@@ -485,5 +485,15 @@ async function boot() {
 (async function main() {
   startClock({ dateEl: els.clockDate, timeEl: els.clockTime });
   setInterval(renderConnStatus, 1000);
-  await boot();
+  try {
+    await boot();
+  } catch (err) {
+    // An error here previously failed silently (an unhandled promise
+    // rejection with no console trace and no visible UI change) — e.g. when
+    // leaflet.js wasn't loaded, initMap() threw and the rest of boot()
+    // (fetchSnapshot, schedulePolling) never ran, with no sign why. Surface
+    // it instead.
+    console.error('boot failed:', err);
+    setText(els.connStatus, '화면 초기화 오류 — 새로고침해 보세요');
+  }
 })();

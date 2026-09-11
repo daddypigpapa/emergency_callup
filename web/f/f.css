@@ -78,7 +78,9 @@ html, body {
   position: relative;
   min-height: 0;
 }
-.map { position: absolute; inset: 0; }
+/* A visible outline so the map area reads as "a map" (framed region) even
+   before/without tiles loading — e.g. no VWorld key configured yet. */
+.map { position: absolute; inset: 0; border: 1px solid var(--line); }
 .map-fallback {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;

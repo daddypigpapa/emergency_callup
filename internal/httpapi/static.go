@@ -2,24 +2,26 @@ package httpapi
 
 import (
 	"net/http"
-	"strings"
 
 	"emergencycallup/web"
 )
 
 // registerStatic serves the embedded web/ frontend (SPEC §3.3: go:embed).
-// HTML is served with no-cache (SPA shells change often); everything else
-// gets a long cache lifetime since filenames are expected to carry a
-// ?v={BUILD_ID} cache-buster (SPEC §13.2).
+//
+// DECISION: SPEC §13.2 calls for a 1-year immutable cache on non-HTML
+// assets, keyed off a "?v={BUILD_ID}" cache-buster in the HTML that
+// references them. This build doesn't yet generate a real per-release
+// BUILD_ID (the HTML hardcodes "?v=1"), so a long immutable cache would
+// silently serve stale CSS/JS after every deploy — which is exactly what
+// happened during development here. Until a real BUILD_ID exists, every
+// response (HTML included) is "no-cache": the browser always revalidates
+// with the server instead of trusting a cached copy blindly. Swap this back
+// to the long-cache branch once BUILD_ID is wired up.
 func (s *Server) registerStatic(mux *http.ServeMux) {
 	fileServer := http.FileServer(http.FS(web.Files))
 
 	handler := func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, ".html") || strings.HasSuffix(r.URL.Path, "/") {
-			w.Header().Set("Cache-Control", "no-cache")
-		} else {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		}
+		w.Header().Set("Cache-Control", "no-cache")
 		fileServer.ServeHTTP(w, r)
 	}
 

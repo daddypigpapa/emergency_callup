@@ -63,6 +63,28 @@ func TestStaticRoutes_DoNotRedirectLoop(t *testing.T) {
 	}
 }
 
+// Regression: both screens use the Leaflet global `L` (via web/shared/map.js
+// on the field screen, and directly in a.js on the admin board), but an
+// earlier version of both index.html files loaded leaflet.css and never
+// loaded leaflet.js as a <script> — so `L` was undefined, map
+// initialization threw, and (because nothing caught it) the rest of each
+// page's boot sequence silently never ran. Assert the script tag is present
+// so this can't quietly regress again.
+func TestStaticRoutes_LoadLeafletScript(t *testing.T) {
+	s := testServer(t)
+	h := s.Handler()
+
+	for _, path := range []string{"/f/", "/a/"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		body := rec.Body.String()
+		if !bytes.Contains([]byte(body), []byte(`src="/vendor/leaflet/leaflet.js`)) {
+			t.Errorf("GET %s: page does not load /vendor/leaflet/leaflet.js as a <script>", path)
+		}
+	}
+}
+
 func TestHealthz_NoAuthRequired(t *testing.T) {
 	s := testServer(t)
 	h := s.Handler()

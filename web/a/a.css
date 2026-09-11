@@ -100,7 +100,9 @@ html, body {
 }
 
 .r4 { position: relative; background: var(--paper); border-top: 1px solid var(--line); }
-.map { position: absolute; inset: 0; }
+/* A visible outline so the map area reads as "a map" (framed region) even
+   before/without tiles loading — e.g. no VWorld key configured yet. */
+.map { position: absolute; inset: 0; border: 1px solid var(--line); }
 .legend {
   position: absolute; left: 8px; bottom: 8px; z-index: 500;
   background: var(--paper); color: var(--ink); border: 1px solid var(--line);

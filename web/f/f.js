@@ -337,5 +337,11 @@ async function boot() {
 (async function main() {
   await loadConfig();
   startClock({ timeEl: els.clockTime });
-  await boot();
+  try {
+    await boot();
+  } catch (err) {
+    // Surface boot failures instead of letting them fail silently (e.g. if
+    // a required script like Leaflet failed to load).
+    console.error('boot failed:', err);
+  }
 })();
