@@ -38,6 +38,31 @@ func testServer(t *testing.T) *Server {
 	return NewServer(cfg, db)
 }
 
+// Regression: an earlier version rewrote "/a/" and "/f/" to their
+// index.html path before handing off to http.FileServer, which
+// 301-redirects any URL literally ending in "/index.html" back to "./" —
+// turning every visit to the admin/field screens into an infinite redirect
+// loop. Both directory roots must serve the page directly (200), and a
+// direct request for .../index.html must still redirect to the directory
+// (that specific redirect is http.FileServer's own canonicalization and is
+// fine — it's the loop that isn't).
+func TestStaticRoutes_DoNotRedirectLoop(t *testing.T) {
+	s := testServer(t)
+	h := s.Handler()
+
+	for _, path := range []string{"/f/", "/a/"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s = %d, want 200 (Location: %s)", path, rec.Code, rec.Header().Get("Location"))
+		}
+		if ct := rec.Header().Get("Content-Type"); ct == "" {
+			t.Errorf("GET %s: missing Content-Type", path)
+		}
+	}
+}
+
 func TestHealthz_NoAuthRequired(t *testing.T) {
 	s := testServer(t)
 	h := s.Handler()
