@@ -39,10 +39,12 @@ export function fitArea(bbox) {
 export function drawArea(area) {
   if (!map) return;
   areaLayer.clearLayers();
+  // No color (per design direction): the mission area is a black outline
+  // with a faint black (not colored) fill so it still reads against tiles.
   if (area.kind === 'circle') {
-    L.circle([area.lat, area.lng], { radius: area.r, color: '#2563eb', weight: 2, fillOpacity: 0.08 }).addTo(areaLayer);
+    L.circle([area.lat, area.lng], { radius: area.r, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06 }).addTo(areaLayer);
   } else if (area.kind === 'polygon' && area.polygon) {
-    L.polygon(area.polygon, { color: '#2563eb', weight: 2, fillOpacity: 0.08 }).addTo(areaLayer);
+    L.polygon(area.polygon, { color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06 }).addTo(areaLayer);
   }
   if (area.nav) {
     setNav(area.nav[0], area.nav[1]);
@@ -53,8 +55,8 @@ export function setMe(lat, lng, acc) {
   if (!map) return;
   const latlng = [lat, lng];
   if (!meMarker) {
-    meMarker = L.circleMarker(latlng, { radius: 7, color: '#fff', weight: 2, fillColor: '#2563eb', fillOpacity: 1 }).addTo(map);
-    meAccCircle = L.circle(latlng, { radius: acc || 0, color: '#2563eb', weight: 1, opacity: 0.3, fillOpacity: 0.08 }).addTo(map);
+    meMarker = L.circleMarker(latlng, { radius: 7, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 1 }).addTo(map);
+    meAccCircle = L.circle(latlng, { radius: acc || 0, color: '#111', weight: 1, opacity: 0.4, fillOpacity: 0.05 }).addTo(map);
   } else {
     meMarker.setLatLng(latlng);
     meAccCircle.setLatLng(latlng);

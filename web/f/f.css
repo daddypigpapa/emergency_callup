@@ -1,12 +1,14 @@
-/* Field-personnel screen (SPEC §8.1.2). System fonts only (§8.0). */
+/* Field-personnel screen (SPEC §8.1.2). System fonts only (§8.0).
+   No color: everything is black/white/gray lines and shapes. Status is
+   told apart by border weight/style (solid/dashed/double) and text, not hue
+   — this also satisfies SPEC §8.0's "색만으로 상태를 구분하지 않는다". */
 :root {
   color-scheme: light;
-  --board-default: #374151;
-  --board-arrived: #16a34a;
-  --board-moving: #2563eb;
-  --board-left: #dc2626;
-  --board-warn: #d97706;
-  --board-gray: #6b7280;
+  --ink: #111;
+  --line: #111;
+  --muted: #666;
+  --faint: #ccc;
+  --paper: #fff;
 }
 
 * { box-sizing: border-box; }
@@ -16,8 +18,8 @@ html, body {
   height: 100%;
   font-family: system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   word-break: keep-all;
-  background: #f8fafc;
-  color: #111827;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 .screen { height: 100dvh; }
@@ -35,40 +37,42 @@ html, body {
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: #111827;
-  color: #fff;
+  background: var(--paper);
+  color: var(--ink);
+  border-bottom: 2px solid var(--line);
   font-variant-numeric: tabular-nums;
 }
-.clock { font-size: 1.1rem; font-weight: 600; }
-.incident-type { font-size: 1rem; font-weight: 600; }
+.clock { font-size: 1.1rem; font-weight: 700; }
+.incident-type { font-size: 1rem; font-weight: 700; border: 1px solid var(--line); padding: 2px 8px; }
 
 .r2 {
   padding: 10px 14px;
   text-align: center;
   font-weight: 700;
   font-size: 1.05rem;
-  background: var(--board-default);
-  color: #fff;
-  transition: background-color 0.2s;
+  background: var(--paper);
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
 }
-.r2.arrived { background: var(--board-arrived); }
-.r2.moving { background: var(--board-moving); }
-.r2.left { background: var(--board-left); animation: blink 1s step-start infinite; }
-.r2.warn { background: var(--board-warn); }
-.r2.muted { background: var(--board-gray); }
+/* Priority order per SPEC §8.3, told apart by border weight/style only. */
+.r2.arrived  { border-top: 4px double var(--line); border-bottom: 4px double var(--line); }
+.r2.moving   { border-top: 2px dashed var(--line); border-bottom: 2px dashed var(--line); }
+.r2.left     { border-top: 5px solid var(--ink); border-bottom: 5px solid var(--ink); animation: blink 1s step-start infinite; }
+.r2.warn     { border-top: 3px solid var(--line); border-bottom: 3px solid var(--line); }
+.r2.muted    { color: var(--muted); border-top: 1px dotted var(--faint); border-bottom: 1px dotted var(--faint); }
 @media (prefers-reduced-motion: reduce) { .r2.left { animation: none; } }
-@keyframes blink { 50% { opacity: 0.45; } }
+@keyframes blink { 50% { opacity: 0.35; } }
 
 .r3 {
   padding: 8px 14px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
   font-size: 0.95rem;
 }
-.r3-mission { font-weight: 600; }
-.team-name { color: #2563eb; }
-.r3-area { color: #4b5563; margin-top: 2px; }
-.sep { margin: 0 4px; color: #9ca3af; }
+.r3-mission { font-weight: 700; }
+.team-name { font-weight: 700; text-decoration: underline; }
+.r3-area { color: var(--muted); margin-top: 2px; }
+.sep { margin: 0 4px; color: var(--faint); }
 
 .r4 {
   position: relative;
@@ -78,30 +82,36 @@ html, body {
 .map-fallback {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  padding: 24px; text-align: center; background: #e5e7eb; color: #374151;
+  padding: 24px; text-align: center;
+  background: var(--paper); color: var(--ink);
+  border: 1px dashed var(--line);
 }
 .map-controls {
   position: absolute;
   left: 0; right: 0; bottom: 0;
   display: flex; flex-wrap: wrap; gap: 8px;
   padding: 10px;
-  background: linear-gradient(to top, rgba(255,255,255,0.95), rgba(255,255,255,0.75));
+  background: var(--paper);
+  border-top: 1px solid var(--line);
 }
 .route-btn {
   flex: 1 1 auto;
   min-width: 120px;
   text-align: center;
   padding: 10px 12px;
-  border-radius: 8px;
-  border: none;
+  border-radius: 0;
+  border: 2px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: 700;
   text-decoration: none;
   cursor: pointer;
 }
-.route-btn.kakao { background: #fee500; color: #191919; }
-.route-btn.naver { background: #03c75a; color: #fff; }
-.route-btn.ghost { background: #fff; color: #111827; border: 1px solid #d1d5db; }
+.route-btn:active { background: var(--ink); color: var(--paper); }
+.route-btn.kakao { border-style: solid; }
+.route-btn.naver { border-style: double; border-width: 4px; }
+.route-btn.ghost { border-style: dashed; }
 
 /* ---- Login / password-change screens ---- */
 .login-card {
@@ -111,28 +121,32 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  border: 1px solid var(--line);
 }
 .login-card h1 { font-size: 1.2rem; margin: 0 0 8px; }
-.login-card label { font-size: 0.85rem; color: #374151; }
+.login-card label { font-size: 0.85rem; color: var(--muted); }
 .login-card input {
   padding: 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
   font-size: 1rem;
 }
 .login-card button {
   margin-top: 8px;
   padding: 12px;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: #fff;
-  font-weight: 600;
+  border: 2px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
 }
-.error-text { color: #dc2626; font-size: 0.85rem; min-height: 1.2em; }
-.hint { color: #6b7280; font-size: 0.85rem; }
+.login-card button:active { background: var(--ink); color: var(--paper); }
+.error-text { color: var(--ink); font-weight: 700; font-size: 0.85rem; min-height: 1.2em; }
+.hint { color: var(--muted); font-size: 0.85rem; }
 
 /* ---- Idle / not-a-target screen ---- */
 #idleView {
@@ -142,25 +156,28 @@ html, body {
   padding: 24px;
   text-align: center;
 }
-.idle-text { font-size: 1.1rem; color: #4b5563; }
+.idle-text { font-size: 1.1rem; color: var(--muted); }
 
 /* ---- Sheets / modals ---- */
 .sheet {
-  border: none;
-  border-radius: 12px;
+  border: 2px solid var(--line);
+  border-radius: 0;
   padding: 20px;
   max-width: 420px;
   width: calc(100% - 40px);
+  background: var(--paper);
+  color: var(--ink);
 }
-.sheet::backdrop { background: rgba(0,0,0,0.4); }
+.sheet::backdrop { background: rgba(0, 0, 0, 0.35); }
 .sheet-actions { margin-top: 16px; display: flex; justify-content: flex-end; }
 .sheet-actions .primary {
   padding: 10px 18px;
-  border: none;
-  border-radius: 8px;
-  background: #2563eb;
-  color: #fff;
-  font-weight: 600;
+  border: 2px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
 }
+.sheet-actions .primary:active { background: var(--ink); color: var(--paper); }

@@ -80,7 +80,7 @@ function initMap() {
   map.setView([36.5, 127.8], 7);
 }
 
-function areaLayerStyleFor() { return { color: '#38bdf8', weight: 2, fillOpacity: 0.05 }; }
+function areaLayerStyleFor() { return { color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.05 }; }
 
 function redrawAreas() {
   layerGroup.eachLayer((l) => { if (l._isAreaShape) layerGroup.removeLayer(l); });
@@ -106,16 +106,21 @@ function redrawAreas() {
   }
 }
 
+// No color: every state below is black/white, told apart by fill vs
+// hollow, line weight, and dash pattern only (matches the .dot legend
+// classes in a.css). suspect/stale stay non-color cues too (dashed
+// outline / reduced opacity), consistent with SPEC §8.2.3's "점 테두리
+// 점선(suspect), 투명도 40%(stale)".
 function styleForPerson(row) {
   const [, stateCode, , , , elapsed, flags] = row;
   const suspect = (flags & 2) !== 0;
   const stale = elapsed >= 0 && (serverNow() / 1000 - (board.incident.openedAt / 1000 + elapsed)) > 180;
-  const base = { radius: 6, weight: 2 };
+  const base = { radius: 6, weight: 2, color: '#111' };
   switch (stateCode) {
-    case 4: Object.assign(base, { color: '#166534', fillColor: '#22c55e', fillOpacity: 1 }); break; // arrived
-    case 3: Object.assign(base, { color: '#1e3a8a', fillColor: '#3b82f6', fillOpacity: 1 }); break; // moving
-    case 5: Object.assign(base, { color: '#7f1d1d', fillColor: '#ef4444', fillOpacity: 1, weight: 3 }); break; // left
-    default: Object.assign(base, { color: '#6b7280', fillColor: '#6b7280', fillOpacity: 0 }); break; // notified/logged_in/loc_denied
+    case 4: Object.assign(base, { fillColor: '#111', fillOpacity: 1 }); break; // arrived: filled
+    case 3: Object.assign(base, { fillOpacity: 0, dashArray: '2,2' }); break; // moving: hollow + dashed
+    case 5: Object.assign(base, { fillColor: '#111', fillOpacity: 1, weight: 4 }); break; // left: filled + thick
+    default: Object.assign(base, { fillOpacity: 0 }); break; // notified/logged_in/loc_denied: hollow
   }
   if (suspect) base.dashArray = '3,3';
   if (stale) base.opacity = 0.4, base.fillOpacity = (base.fillOpacity || 0) * 0.4;
