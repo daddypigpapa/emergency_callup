@@ -27,3 +27,6 @@ input, select, textarea { padding: 6px; border: 1px solid var(--line); border-ra
 button.action { padding: 6px 12px; border-radius: 0; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
 button.action:active { background: var(--ink); color: var(--paper); }
 .field-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
+.wide-input { min-width: 320px; flex: 1 1 320px; }
+.hint { color: var(--muted); font-size: 0.85rem; }
+a { color: var(--ink); }

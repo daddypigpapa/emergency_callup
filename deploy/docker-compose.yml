@@ -1,12 +1,12 @@
 # SPEC §12.2. Run from the repo root: `docker compose -f deploy/docker-compose.yml up -d`
-# Put real values in deploy/.env (copied from deploy/.env.example) first.
+# Put real values in deploy/key.env (copied from deploy/key.env.example) first.
 
 services:
   server:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    env_file: ./.env
+    env_file: ./key.env
     volumes:
       - ecu-data:/data
     ports:

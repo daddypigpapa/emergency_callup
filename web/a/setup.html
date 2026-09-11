@@ -14,6 +14,7 @@
     <button class="tab active" data-panel="members">명단</button>
     <button class="tab" data-panel="areas">임무지역</button>
     <button class="tab" data-panel="presets">프리셋</button>
+    <button class="tab" data-panel="map">지도</button>
     <button class="tab" data-panel="admins">관리자 계정</button>
     <button class="tab" data-panel="events">감사기록</button>
   </div>
@@ -54,6 +55,18 @@
       <button class="action" id="presetCreateBtn">추가</button>
     </div>
     <div id="presetListWrap"></div>
+  </section>
+
+  <section id="panel-map" class="panel">
+    <h2>지도 배경 (VWorld 인증키)</h2>
+    <p>현장·관리자 화면의 지도 배경을 그리는 데 쓰는 키입니다. 담당자가 직접 발급받은
+      키로 바꾸면 서버를 다시 켜지 않아도 바로 적용됩니다.
+      <a href="https://www.vworld.kr" target="_blank" rel="noopener">VWorld에서 키 발급받기</a></p>
+    <div class="field-row">
+      <input id="tileKeyInput" class="wide-input" placeholder="예: 9AC4488D-662D-46CE-A40B-817DAEF03EBA">
+      <button class="action" id="tileKeySaveBtn">저장</button>
+    </div>
+    <p id="tileKeyStatus" class="hint"></p>
   </section>
 
   <section id="panel-admins" class="panel">

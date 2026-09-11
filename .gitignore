@@ -4,5 +4,4 @@
 *.db
 *.db-wal
 *.db-shm
-.env
-deploy/.env
+*.env

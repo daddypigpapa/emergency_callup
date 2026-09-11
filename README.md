@@ -100,8 +100,8 @@
 ### 빠르게 시작하기
 
 ```bash
-cp deploy/.env.example deploy/.env   # 값 채우기 (TILE_KEY 등)
-export $(cat deploy/.env | xargs)    # 또는 서비스 매니저의 환경변수 기능 사용
+cp deploy/key.env.example deploy/key.env   # 값 채우기 (TILE_KEY 등)
+export $(cat deploy/key.env | xargs)    # 또는 서비스 매니저의 환경변수 기능 사용
 go build -o bin/server ./cmd/server
 ./bin/server admin create --id admin --name "관리자" --role admin
 ./bin/server
@@ -110,7 +110,7 @@ go build -o bin/server ./cmd/server
 또는 Docker:
 
 ```bash
-cp deploy/.env.example deploy/.env
+cp deploy/key.env.example deploy/key.env
 docker compose -f deploy/docker-compose.yml up -d
 docker compose -f deploy/docker-compose.yml exec server /server admin create --id admin --name "관리자" --role admin
 ```
@@ -131,7 +131,7 @@ After=network.target
 
 [Service]
 Type=simple
-EnvironmentFile=/opt/ecu/.env
+EnvironmentFile=/opt/ecu/key.env
 ExecStart=/opt/ecu/server
 Restart=on-failure
 RestartSec=3

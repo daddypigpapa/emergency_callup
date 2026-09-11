@@ -211,6 +211,32 @@ document.getElementById('adminCreateBtn').addEventListener('click', async () => 
   }
 });
 
+// ---- Map (VWorld tile key) ----
+async function loadTileKey() {
+  try {
+    const res = await api.get('/a/settings/tile-key');
+    document.getElementById('tileKeyInput').value = res.key || '';
+    setText(
+      document.getElementById('tileKeyStatus'),
+      res.source === 'admin' ? '현재 관리자가 등록한 키를 쓰고 있습니다.' : '현재 서버 기본 설정값을 쓰고 있습니다.',
+    );
+  } catch (err) {
+    if (!guardAuth(err)) throw err;
+  }
+}
+
+document.getElementById('tileKeySaveBtn').addEventListener('click', async () => {
+  const key = document.getElementById('tileKeyInput').value.trim();
+  const statusEl = document.getElementById('tileKeyStatus');
+  if (!key) return;
+  try {
+    await api.put('/a/settings/tile-key', { key });
+    setText(statusEl, '저장했습니다. 지도 화면을 새로고침하면 바로 적용됩니다.');
+  } catch (err) {
+    setText(statusEl, err.message || '저장 실패');
+  }
+});
+
 // ---- Events ----
 document.getElementById('eventsLoadBtn').addEventListener('click', async () => {
   const id = document.getElementById('eventsIncidentId').value;
@@ -237,5 +263,6 @@ document.getElementById('eventsLoadBtn').addEventListener('click', async () => {
   await loadMembers();
   await loadAreas();
   await loadPresets();
+  await loadTileKey();
   await loadAdmins();
 })();

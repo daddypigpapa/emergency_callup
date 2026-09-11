@@ -14,6 +14,7 @@ import (
 	"emergencycallup/internal/config"
 	"emergencycallup/internal/incident"
 	"emergencycallup/internal/roster"
+	"emergencycallup/internal/settings"
 	"emergencycallup/internal/sms"
 	"emergencycallup/internal/store"
 	"emergencycallup/internal/tracker"
@@ -38,6 +39,7 @@ type Server struct {
 	Incidents *incident.Store
 	Tracker   *tracker.Tracker
 	SMS       *sms.Service
+	Settings  *settings.Store
 
 	// Now is injected so tests can control the clock. Defaults to time.Now.
 	Now func() time.Time
@@ -87,6 +89,7 @@ func NewServer(cfg *config.Config, db *store.DB) *Server {
 		Incidents: incidents,
 		Tracker:   tracker.New(db.DB, incidents, areas, auditLog),
 		SMS:       sms.NewService(db.DB, httpProvider, auditLog),
+		Settings:  settings.NewStore(db.DB),
 		Now:       time.Now,
 		startedAt: time.Now(),
 	}
@@ -150,6 +153,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/a/admins", s.requireAdminSession(auth.RoleAdmin, s.handleAdminCreate))
 	mux.HandleFunc("PUT /api/v1/a/admins/{id}", s.requireAdminSession(auth.RoleAdmin, s.handleAdminUpdate))
 	mux.HandleFunc("GET /api/v1/a/events", s.requireAdminSession(auth.RoleAdmin, s.handleEventsList))
+	mux.HandleFunc("GET /api/v1/a/settings/tile-key", s.requireAdminSession(auth.RoleAdmin, s.handleTileKeyGet))
+	mux.HandleFunc("PUT /api/v1/a/settings/tile-key", s.requireAdminSession(auth.RoleAdmin, s.handleTileKeySet))
 
 	s.registerStatic(mux)
 
