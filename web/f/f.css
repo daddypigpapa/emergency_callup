@@ -1,0 +1,166 @@
+/* Field-personnel screen (SPEC §8.1.2). System fonts only (§8.0). */
+:root {
+  color-scheme: light;
+  --board-default: #374151;
+  --board-arrived: #16a34a;
+  --board-moving: #2563eb;
+  --board-left: #dc2626;
+  --board-warn: #d97706;
+  --board-gray: #6b7280;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  word-break: keep-all;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.screen { height: 100dvh; }
+
+/* ---- Main layout: R1/R2/R3/R4 (SPEC §8.1.2) ---- */
+#mainView {
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+}
+
+.row { min-width: 0; }
+
+.r1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #111827;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.clock { font-size: 1.1rem; font-weight: 600; }
+.incident-type { font-size: 1rem; font-weight: 600; }
+
+.r2 {
+  padding: 10px 14px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.05rem;
+  background: var(--board-default);
+  color: #fff;
+  transition: background-color 0.2s;
+}
+.r2.arrived { background: var(--board-arrived); }
+.r2.moving { background: var(--board-moving); }
+.r2.left { background: var(--board-left); animation: blink 1s step-start infinite; }
+.r2.warn { background: var(--board-warn); }
+.r2.muted { background: var(--board-gray); }
+@media (prefers-reduced-motion: reduce) { .r2.left { animation: none; } }
+@keyframes blink { 50% { opacity: 0.45; } }
+
+.r3 {
+  padding: 8px 14px;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.95rem;
+}
+.r3-mission { font-weight: 600; }
+.team-name { color: #2563eb; }
+.r3-area { color: #4b5563; margin-top: 2px; }
+.sep { margin: 0 4px; color: #9ca3af; }
+
+.r4 {
+  position: relative;
+  min-height: 0;
+}
+.map { position: absolute; inset: 0; }
+.map-fallback {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; text-align: center; background: #e5e7eb; color: #374151;
+}
+.map-controls {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex; flex-wrap: wrap; gap: 8px;
+  padding: 10px;
+  background: linear-gradient(to top, rgba(255,255,255,0.95), rgba(255,255,255,0.75));
+}
+.route-btn {
+  flex: 1 1 auto;
+  min-width: 120px;
+  text-align: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.route-btn.kakao { background: #fee500; color: #191919; }
+.route-btn.naver { background: #03c75a; color: #fff; }
+.route-btn.ghost { background: #fff; color: #111827; border: 1px solid #d1d5db; }
+
+/* ---- Login / password-change screens ---- */
+.login-card {
+  max-width: 360px;
+  margin: 15vh auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.login-card h1 { font-size: 1.2rem; margin: 0 0 8px; }
+.login-card label { font-size: 0.85rem; color: #374151; }
+.login-card input {
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+.login-card button {
+  margin-top: 8px;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.error-text { color: #dc2626; font-size: 0.85rem; min-height: 1.2em; }
+.hint { color: #6b7280; font-size: 0.85rem; }
+
+/* ---- Idle / not-a-target screen ---- */
+#idleView {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+.idle-text { font-size: 1.1rem; color: #4b5563; }
+
+/* ---- Sheets / modals ---- */
+.sheet {
+  border: none;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 420px;
+  width: calc(100% - 40px);
+}
+.sheet::backdrop { background: rgba(0,0,0,0.4); }
+.sheet-actions { margin-top: 16px; display: flex; justify-content: flex-end; }
+.sheet-actions .primary {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+}

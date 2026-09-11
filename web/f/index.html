@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>비상 인력동원 · 현장</title>
+<link rel="stylesheet" href="/f/f.css?v=1">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=1">
+</head>
+<body>
+
+  <!-- 로그인 화면 -->
+  <section id="loginView" class="screen" hidden>
+    <form id="loginForm" class="login-card">
+      <h1>현장인력 로그인</h1>
+      <label for="loginId">아이디</label>
+      <input id="loginId" name="id" type="text" autocomplete="username" required>
+      <label for="loginPw">비밀번호</label>
+      <input id="loginPw" name="pw" type="password" autocomplete="current-password" required>
+      <button type="submit">로그인</button>
+      <p id="loginError" class="error-text" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- 비밀번호 변경 화면 -->
+  <section id="pwChangeView" class="screen" hidden>
+    <form id="pwChangeForm" class="login-card">
+      <h1>비밀번호 변경</h1>
+      <p class="hint">최초 로그인입니다. 새 비밀번호로 변경해 주세요.</p>
+      <label for="pwOld">현재 비밀번호</label>
+      <input id="pwOld" name="old" type="password" autocomplete="current-password" required>
+      <label for="pwNew">새 비밀번호 (8자 이상)</label>
+      <input id="pwNew" name="new" type="password" autocomplete="new-password" required minlength="8">
+      <button type="submit">변경</button>
+      <p id="pwChangeError" class="error-text" role="alert"></p>
+    </form>
+  </section>
+
+  <!-- 본 화면 -->
+  <section id="mainView" class="screen" hidden>
+    <header id="r1" class="row r1">
+      <span id="clockTime" class="clock">--:--:--</span>
+      <span id="incidentType" class="incident-type"></span>
+    </header>
+
+    <div id="r2" class="row r2" role="status" aria-live="polite">
+      <span id="board" class="board-text">위치 확인 중</span>
+    </div>
+
+    <div id="r3" class="row r3">
+      <div class="r3-mission">
+        <span id="teamName" class="team-name"></span>
+        <span class="sep">·</span>
+        <span id="missionText" class="mission-text"></span>
+      </div>
+      <div class="r3-area">
+        임무지역: <span id="areaName"></span>
+        <span class="sep">·</span>
+        <span id="areaDistance"></span>
+      </div>
+    </div>
+
+    <div id="r4" class="row r4">
+      <div id="mapEl" class="map"></div>
+      <div id="mapFallback" class="map-fallback" hidden>지도를 불러오지 못했습니다. 가는길 버튼을 이용하세요.</div>
+      <div class="map-controls">
+        <a id="kakaoBtn" class="route-btn kakao" target="_blank" rel="noopener">카카오맵 가는길</a>
+        <a id="naverBtn" class="route-btn naver">네이버지도 가는길</a>
+        <button id="meBtn" class="route-btn ghost" type="button">내 위치</button>
+        <button id="wakeBtn" class="route-btn ghost" type="button" hidden>화면 켜두기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 대기 화면 (IDLE / NONE) -->
+  <section id="idleView" class="screen" hidden>
+    <p id="idleText" class="idle-text"></p>
+  </section>
+
+  <!-- 위치 안내 시트 -->
+  <dialog id="consentSheet" class="sheet">
+    <p>임무지역 도착을 자동 확인하려고 위치를 수집합니다. 상황이 끝나면 수집을 멈춥니다.</p>
+    <p class="hint">이동 중에는 이 화면을 켜 두세요. 화면이 꺼지면 위치가 전송되지 않습니다.</p>
+    <div class="sheet-actions">
+      <button id="consentAllowBtn" type="button" class="primary">위치 권한 허용</button>
+    </div>
+  </dialog>
+
+  <!-- 임무변경확인 팝업 -->
+  <dialog id="ackModal" class="sheet">
+    <p>관리자가 임무를 변경했습니다. 확인을 누르면 새 임무를 불러옵니다.</p>
+    <div class="sheet-actions">
+      <button id="ackBtn" type="button" class="primary">임무변경확인</button>
+    </div>
+  </dialog>
+
+  <script type="module" src="/f/f.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# SPEC §12.2 option 3: reverse proxy in front of the app server, terminating
+# TLS with your agency's own certificate (Caddy can also auto-provision a
+# public CA cert if the domain is publicly resolvable — remove `tls` below
+# to let it do that automatically).
+#
+# Copy this file, replace mob.example.go.kr, and point Caddy at it.
+
+mob.example.go.kr {
+	# Use an agency-issued cert:
+	# tls /etc/caddy/certs/fullchain.pem /etc/caddy/certs/privkey.pem
+
+	reverse_proxy server:8080 {
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	encode gzip
+}

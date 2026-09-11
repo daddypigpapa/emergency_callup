@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>비상 인력동원 설정</title>
+<link rel="stylesheet" href="/a/a.css?v=1">
+<link rel="stylesheet" href="/a/setup.css?v=1">
+</head>
+<body>
+<div class="setup-wrap">
+  <h1>관리자 설정</h1>
+  <div class="setup-tabs">
+    <button class="tab active" data-panel="members">명단</button>
+    <button class="tab" data-panel="areas">임무지역</button>
+    <button class="tab" data-panel="presets">프리셋</button>
+    <button class="tab" data-panel="admins">관리자 계정</button>
+    <button class="tab" data-panel="events">감사기록</button>
+  </div>
+
+  <section id="panel-members" class="panel active">
+    <h2>명단 가져오기</h2>
+    <div class="field-row">
+      <input type="file" id="importFile" accept=".xlsx">
+      <button class="action" id="importPreviewBtn">미리보기</button>
+    </div>
+    <div id="importResult"></div>
+    <h2>등록된 인원</h2>
+    <div id="memberTableWrap"></div>
+  </section>
+
+  <section id="panel-areas" class="panel">
+    <h2>임무지역</h2>
+    <div id="areaListWrap"></div>
+    <h3>새 지역 (원)</h3>
+    <div class="field-row">
+      <input id="areaName" placeholder="이름">
+      <input id="areaLat" placeholder="위도" type="number" step="0.00001">
+      <input id="areaLng" placeholder="경도" type="number" step="0.00001">
+      <input id="areaRadius" placeholder="반경(m)" type="number">
+      <button class="action" id="areaCreateBtn">등록</button>
+    </div>
+  </section>
+
+  <section id="panel-presets" class="panel">
+    <h2>프리셋</h2>
+    <div class="field-row">
+      <select id="presetKind">
+        <option value="incident_type">발령종류</option>
+        <option value="message">메시지</option>
+        <option value="mission">임무</option>
+      </select>
+      <input id="presetText" placeholder="문구">
+      <button class="action" id="presetCreateBtn">추가</button>
+    </div>
+    <div id="presetListWrap"></div>
+  </section>
+
+  <section id="panel-admins" class="panel">
+    <h2>관리자 계정</h2>
+    <div class="field-row">
+      <input id="adminLoginId" placeholder="로그인ID">
+      <input id="adminName" placeholder="이름">
+      <input id="adminPw" placeholder="초기 비밀번호" type="password">
+      <select id="adminRole"><option value="operator">operator</option><option value="admin">admin</option></select>
+      <button class="action" id="adminCreateBtn">추가</button>
+    </div>
+    <div id="adminListWrap"></div>
+  </section>
+
+  <section id="panel-events" class="panel">
+    <h2>감사기록</h2>
+    <div class="field-row">
+      <input id="eventsIncidentId" placeholder="사건 ID" type="number">
+      <button class="action" id="eventsLoadBtn">조회</button>
+    </div>
+    <div id="eventsListWrap"></div>
+  </section>
+</div>
+<script type="module" src="/a/setup.js?v=1"></script>
+</body>
+</html>

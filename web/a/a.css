@@ -1,0 +1,137 @@
+/* Admin situation board (SPEC §8.2.1): same 4-row layout, same ratios, on
+   every device — only font size / tile density change (container queries). */
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%;
+  font-family: system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  word-break: keep-all;
+  background: #0f172a;
+  color: #111827;
+}
+
+.board {
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 6fr) minmax(0, 8fr) minmax(0, 34fr) minmax(0, 52fr);
+  font-size: clamp(10px, 1.6vmin, 18px);
+}
+.board > * { min-height: 0; overflow: hidden; }
+
+.r1 {
+  display: flex; align-items: center; gap: 16px; padding: 0 14px;
+  background: #111827; color: #fff; font-variant-numeric: tabular-nums;
+}
+.r1 span:first-child { font-weight: 600; }
+.conn-status { margin-left: auto; color: #f59e0b; font-size: 0.85em; }
+
+.r2 {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 0 14px; background: #1f2937; color: #fff; flex-wrap: wrap;
+}
+.incident-summary { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+.badge {
+  background: #2563eb; color: #fff; padding: 2px 10px; border-radius: 999px;
+  font-weight: 700; font-size: 0.9em; white-space: nowrap;
+}
+#incidentMessage { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r2-actions { display: flex; gap: 6px; align-items: center; }
+.r2-actions button, .r2-actions a {
+  padding: 6px 10px; border-radius: 6px; border: 1px solid #4b5563;
+  background: #374151; color: #fff; font-size: 0.85em; cursor: pointer; text-decoration: none;
+}
+.r2-actions button.danger { background: #7f1d1d; border-color: #991b1b; }
+.r2-actions button.primary { background: #1d4ed8; border-color: #2563eb; }
+
+.teams {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background: #0b1220;
+}
+.team {
+  container-type: size;
+  min-width: 0; min-height: 0; overflow: hidden;
+  background: #1e293b; color: #e5e7eb;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  padding: 6px 8px;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  cursor: pointer;
+}
+.team.empty { opacity: 0.35; cursor: default; }
+.team.has-left { border-color: #dc2626; }
+.team .no { font-weight: 700; font-size: 1.1em; }
+.team .mission { font-size: 0.85em; color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team .area { font-size: 0.75em; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team .bar-wrap { background: #334155; border-radius: 4px; height: 6px; overflow: hidden; margin: 2px 0; }
+.team .bar-fill { background: #22c55e; height: 100%; }
+.team .counts { font-size: 0.75em; display: flex; gap: 6px; flex-wrap: wrap; }
+.team .counts .left-count { color: #f87171; font-weight: 700; }
+.team .ack-dot { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; display: inline-block; }
+
+@container (max-width: 179px) {
+  .team .area { display: none; }
+}
+@container (max-width: 109px) {
+  .team .mission { display: none; }
+}
+
+.r4 { position: relative; background: #000; }
+.map { position: absolute; inset: 0; }
+.legend {
+  position: absolute; left: 8px; bottom: 8px; z-index: 500;
+  background: rgba(15,23,42,0.85); color: #e5e7eb; padding: 6px 10px; border-radius: 8px;
+  font-size: 0.8em; display: flex; gap: 10px; align-items: center;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 3px; }
+.dot.arrived { background: #22c55e; }
+.dot.moving { background: #2563eb; }
+.dot.left { background: #dc2626; border: 2px solid #fff; }
+.dot.connected { background: transparent; border: 2px solid #9ca3af; }
+
+/* ---- Login (reused pattern) ---- */
+.login-card {
+  max-width: 360px; margin: 15vh auto; padding: 24px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: #fff; border-radius: 12px;
+}
+.login-card h1 { font-size: 1.2rem; margin: 0 0 8px; }
+.login-card input { padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; }
+.login-card button {
+  margin-top: 8px; padding: 12px; border: none; border-radius: 8px;
+  background: #2563eb; color: #fff; font-weight: 600; font-size: 1rem; cursor: pointer;
+}
+.error-text { color: #dc2626; font-size: 0.85rem; min-height: 1.2em; }
+
+/* ---- Sheets ---- */
+.sheet {
+  border: none; border-radius: 12px; padding: 20px;
+  max-width: 480px; width: calc(100% - 40px);
+  font-size: 15px;
+}
+.sheet.wide { max-width: 720px; }
+.sheet::backdrop { background: rgba(0,0,0,0.45); }
+.sheet label { display: block; margin: 10px 0 4px; font-size: 0.9em; color: #374151; }
+.sheet input, .sheet select, .sheet textarea {
+  width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 1rem;
+}
+.sheet .primary {
+  margin-top: 14px; padding: 10px 16px; border: none; border-radius: 8px;
+  background: #2563eb; color: #fff; font-weight: 600; cursor: pointer;
+}
+.close-btn {
+  margin-top: 12px; padding: 8px 14px; border: 1px solid #d1d5db; border-radius: 8px;
+  background: #fff; cursor: pointer;
+}
+.tabs { display: flex; gap: 6px; margin: 10px 0; }
+.tab-btn { padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 999px; background: #fff; cursor: pointer; }
+.tab-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.roster-list { max-height: 50vh; overflow-y: auto; }
+.roster-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 0.9em; align-items: center; }
+.roster-row .name { font-weight: 600; min-width: 4em; }
+.roster-row .state { margin-left: auto; font-size: 0.85em; color: #6b7280; }

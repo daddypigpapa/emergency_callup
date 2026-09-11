@@ -1,0 +1,36 @@
+# SPEC §12.2. Run from the repo root: `docker compose -f deploy/docker-compose.yml up -d`
+# Put real values in deploy/.env (copied from deploy/.env.example) first.
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    env_file: ./.env
+    volumes:
+      - ecu-data:/data
+    ports:
+      - "8080:8080" # remove this if Caddy (below) is your only public entry point
+    restart: unless-stopped
+
+  # Optional: terminates TLS with an agency certificate and reverse-proxies
+  # to the server (SPEC §12.2 option 3). Skip this service entirely if you
+  # already have a reverse proxy, or if TLS_CERT_FILE/TLS_KEY_FILE are set
+  # so the server terminates TLS itself.
+  caddy:
+    image: caddy:2-alpine
+    volumes:
+      - ./Caddyfile.example:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "443:443"
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  ecu-data:
+  caddy-data:
+  caddy-config:

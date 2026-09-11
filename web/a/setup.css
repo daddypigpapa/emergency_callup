@@ -1,0 +1,20 @@
+/* Admin setup screen (SPEC §8.2.6): general responsive page, not subject to
+   the situation board's fixed 4-row ratio rule. No inline <style>/style=""
+   anywhere (SPEC §11.2 CSP style-src 'self', no unsafe-inline). */
+body { background: #f8fafc; }
+.setup-wrap {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+.setup-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.setup-tabs button { padding: 8px 14px; border-radius: 999px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; }
+.setup-tabs button.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.panel { display: none; background: #fff; border-radius: 12px; padding: 16px; }
+.panel.active { display: block; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; }
+input, select, textarea { padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; }
+button.action { padding: 6px 12px; border-radius: 6px; border: 1px solid #2563eb; background: #2563eb; color: #fff; cursor: pointer; }
+.field-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }

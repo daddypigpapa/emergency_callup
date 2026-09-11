@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>비상 인력동원 상황판</title>
+<link rel="stylesheet" href="/a/a.css?v=1">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=1">
+</head>
+<body>
+
+  <section id="loginView" class="screen" hidden>
+    <form id="loginForm" class="login-card">
+      <h1>관리자 로그인</h1>
+      <label for="loginId">아이디</label>
+      <input id="loginId" name="id" type="text" autocomplete="username" required>
+      <label for="loginPw">비밀번호</label>
+      <input id="loginPw" name="pw" type="password" autocomplete="current-password" required>
+      <button type="submit">로그인</button>
+      <p id="loginError" class="error-text" role="alert"></p>
+    </form>
+  </section>
+
+  <section id="boardView" class="board" hidden>
+    <header class="row r1">
+      <span id="clockDate"></span>
+      <span id="clockTime"></span>
+      <span id="connStatus" class="conn-status"></span>
+    </header>
+
+    <div class="row r2">
+      <div class="incident-summary">
+        <span id="incidentType" class="badge"></span>
+        <span id="incidentMessage"></span>
+      </div>
+      <div class="r2-actions">
+        <button id="editBtn" type="button">수정</button>
+        <button id="smsBtn" type="button">문자</button>
+        <button id="closeBtn" type="button" class="danger">상황종료</button>
+        <button id="newIncidentBtn" type="button" class="primary" hidden>새 발령</button>
+        <a id="setupLink" href="/a/setup.html">설정</a>
+      </div>
+    </div>
+
+    <div class="row r3 teams" id="teamsGrid"></div>
+
+    <div class="row r4">
+      <div id="mapEl" class="map"></div>
+      <div class="legend">
+        <span class="dot arrived"></span>응소
+        <span class="dot moving"></span>이동중
+        <span class="dot left"></span>이탈
+        <span class="dot connected"></span>접속
+      </div>
+    </div>
+  </section>
+
+  <!-- 하단 시트: 조 상세 (임무 변경 / 조원 목록) -->
+  <dialog id="teamSheet" class="sheet wide">
+    <h2 id="teamSheetTitle"></h2>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="mission">임무 변경</button>
+      <button class="tab-btn" data-tab="roster">조원 목록</button>
+    </div>
+    <div id="teamMissionTab" class="tab-panel">
+      <label>임무 <input id="teamMissionInput" type="text"></label>
+      <label>임무지역
+        <select id="teamAreaSelect"></select>
+      </label>
+      <button id="teamMissionApply" class="primary" type="button">변경 적용</button>
+    </div>
+    <div id="teamRosterTab" class="tab-panel" hidden>
+      <div id="teamRosterList" class="roster-list"></div>
+    </div>
+    <button class="close-btn" id="teamSheetClose" type="button">닫기</button>
+  </dialog>
+
+  <!-- 인원 카드 -->
+  <dialog id="personCard" class="sheet">
+    <div id="personCardBody"></div>
+    <button class="close-btn" id="personCardClose" type="button">닫기</button>
+  </dialog>
+
+  <!-- 발령 / 수정 / 문자 / 종료 시트 -->
+  <dialog id="incidentSheet" class="sheet wide">
+    <h2 id="incidentSheetTitle">새 발령</h2>
+    <div id="incidentSheetBody"></div>
+    <button class="close-btn" id="incidentSheetClose" type="button">닫기</button>
+  </dialog>
+
+  <script type="module" src="/a/a.js?v=1"></script>
+</body>
+</html>
