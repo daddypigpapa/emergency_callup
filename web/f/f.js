@@ -45,6 +45,8 @@ const state = {
   loop: null,
   connLostSince: null,
   wakeOn: false,
+  lastPos: null, // {lat, lng} — most recent raw GPS reading, for [내 위치]
+  meFitShowsMe: false, // SPEC §8.1.3: [내 위치] toggles area-only vs area+me
 };
 
 function showOnly(view) {
@@ -177,7 +179,11 @@ function maybeShowConsentSheet(incidentId, st) {
     els.consentSheet.close();
     // Trigger the browser permission prompt inside this click handler.
     navigator.geolocation.getCurrentPosition(
-      async () => {
+      async (pos) => {
+        // Show the position immediately rather than waiting for the loop's
+        // first watchPosition tick — the user just granted permission and
+        // should see their dot appear right away.
+        fieldMap.setMe(pos.coords.latitude, pos.coords.longitude, Math.round(pos.coords.accuracy));
         await api.post('/f/consent', { granted: true, textVer: '2026-09-v1' });
         startLoopIfNeeded();
       },
@@ -197,6 +203,15 @@ function startLoopIfNeeded() {
   state.loop = new LocationLoop({
     onFix: (fix) => api.post('/f/fix', { la: fix.lat, lo: fix.lng, ac: fix.acc, ts: fix.ts }),
     onSync: () => api.get('/f/sync'),
+    onPosition: (fix) => {
+      // Every raw GPS reading updates the "내 위치" dot immediately, even
+      // when SPEC §6.1's send-throttling means this particular reading
+      // isn't posted to the server. Previously nothing ever called
+      // fieldMap.setMe() at all, so the dot never appeared no matter how
+      // long location tracking ran.
+      state.lastPos = { lat: fix.lat, lng: fix.lng };
+      fieldMap.setMe(fix.lat, fix.lng, fix.acc);
+    },
     onStatus: (status, detail) => {
       if (status === 'offline') {
         if (!state.connLostSince) state.connLostSince = Date.now();
@@ -264,9 +279,27 @@ function showAckModal() {
 }
 
 // ---- Buttons ----
+// SPEC §8.1.3: "[내 위치] 버튼: 임무지역+내 위치를 함께 맞춤. 다시 누르면
+// 임무지역만." A real GPS position is almost never inside the (often small,
+// e.g. 100–150m) mission-area circle the map starts framed on, so without
+// this the live position dot renders off-screen with nothing telling the
+// user it exists — indistinguishable from "위치를 못 잡는다".
 els.meBtn.addEventListener('click', () => {
-  // Toggle handled inside fieldMap via repeated fitArea calls; SPEC §8.1.3.
-  if (state.task) fieldMap.fitArea(state.task.area.bbox);
+  if (!state.task) return;
+  if (state.lastPos) {
+    if (state.meFitShowsMe) {
+      fieldMap.fitArea(state.task.area.bbox);
+      state.meFitShowsMe = false;
+    } else {
+      fieldMap.fitAreaAndMe(state.task.area.bbox, state.lastPos.lat, state.lastPos.lng);
+      state.meFitShowsMe = true;
+    }
+  } else {
+    // No GPS reading yet (e.g. still waiting on the permission prompt or
+    // the first fix) — nothing to add to the view yet, but re-centering on
+    // the area is still useful feedback that the button did something.
+    fieldMap.fitArea(state.task.area.bbox);
+  }
 });
 
 els.wakeBtn.addEventListener('click', async () => {

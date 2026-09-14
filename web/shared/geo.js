@@ -34,6 +34,12 @@ function getCurrentPositionOnce(options) {
  * @param {(status:string, detail?:any) => void} [opts.onStatus] - UI status callback.
  * @param {() => void} [opts.onUnauthorized] - called on a 401 (SPEC: "401 → 로그인 화면").
  * @param {(res:object) => void} [opts.onStop] - called when the server signals stop/CLOSED/IDLE/NONE.
+ * @param {(fix:{lat,lng,acc,ts}) => void} [opts.onPosition] - called for every
+ *   raw reading that passes the ACC_DROP check, whether or not it's actually
+ *   sent to the server this time (SPEC §6.1's send policy throttles the
+ *   network, not what the device itself knows) — use this to draw the
+ *   live "내 위치" dot (SPEC §8.1.3), separately from onFix's server
+ *   round-trip.
  */
 export class LocationLoop {
   constructor(opts) {
@@ -42,6 +48,7 @@ export class LocationLoop {
     this.onStatus = opts.onStatus || (() => {});
     this.onUnauthorized = opts.onUnauthorized || (() => {});
     this.onStop = opts.onStop || (() => {});
+    this.onPosition = opts.onPosition || (() => {});
 
     this.watchId = null;
     this.heartbeatTimer = null;
@@ -114,6 +121,7 @@ export class LocationLoop {
     const acc = Math.round(pos.coords.accuracy);
     if (acc > ACC_DROP_M) return; // ACC_DROP: discard entirely
     const fix = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc, ts: Date.now() };
+    this.onPosition(fix);
     this._maybeSend(fix);
   }
 
@@ -198,7 +206,9 @@ export class LocationLoop {
       try {
         const pos = await getCurrentPositionOnce({ maximumAge: 10000, timeout: 10000 });
         const acc = Math.round(pos.coords.accuracy);
-        this._maybeSend({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc, ts: Date.now() }, true);
+        const fix = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc, ts: Date.now() };
+        this.onPosition(fix);
+        this._maybeSend(fix, true);
       } catch {
         // No fresh reading available: fall back to a plain sync so
         // mission-change/close signals still arrive (SPEC §6.1, R18).
