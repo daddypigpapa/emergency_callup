@@ -16,6 +16,9 @@ body { background: var(--paper); color: var(--ink); }
   padding: 20px;
   font-family: system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
+.setup-header { display: flex; align-items: baseline; gap: 14px; }
+.back-link { text-decoration: none; border: 1px solid var(--line); padding: 4px 10px; font-size: 0.9rem; }
+.back-link:active { background: var(--ink); color: var(--paper); }
 .setup-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .setup-tabs button { padding: 8px 14px; border-radius: 0; border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
 .setup-tabs button.active { background: var(--ink); color: var(--paper); }
