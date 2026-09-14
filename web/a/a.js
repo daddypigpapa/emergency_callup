@@ -47,6 +47,7 @@ const board = {
   m: new Map(), // id -> [id,stateCode,lat5,lng5,acc,elapsed,flags]
   cfg: null,
   activeTeam: null,
+  focusTeam: null, // team no whose members are highlighted on the map
   markers: new Map(), // id -> L.CircleMarker
   pollTimer: null,
   connLostSince: null,
@@ -136,7 +137,25 @@ function styleForPerson(row) {
   }
   if (suspect) base.dashArray = '3,3';
   if (stale) base.opacity = 0.4, base.fillOpacity = (base.fillOpacity || 0) * 0.4;
+  // 조 패널을 클릭해 한 조를 고른 상태: 그 조원은 크고 굵게, 다른 조는 흐리게.
+  if (board.focusTeam != null) {
+    const p = board.people.get(row[0]);
+    if (p && p[3] === board.focusTeam) {
+      base.radius = 9;
+      base.weight += 2;
+    } else {
+      base.opacity = (base.opacity ?? 1) * 0.25;
+      base.fillOpacity = (base.fillOpacity || 0) * 0.25;
+    }
+  }
   return base;
+}
+
+function restyleAllMarkers() {
+  for (const [id, marker] of board.markers) {
+    const row = board.m.get(id);
+    if (row) marker.setStyle(styleForPerson(row));
+  }
 }
 
 function upsertMarker(row) {
@@ -180,8 +199,8 @@ function renderTeams() {
   for (const t of board.teams) {
     const agg = aggregateTeam(t.no);
     const tile = el('div', {
-      class: 'team' + (agg.left > 0 ? ' has-left' : ''),
-      onclick: () => { centerMapOnTeamArea(t); openTeamSheet(t); },
+      class: 'team' + (agg.left > 0 ? ' has-left' : '') + (t.no === board.focusTeam ? ' focused' : ''),
+      onclick: () => { focusTeam(t); openTeamSheet(t); },
     }, [
       el('div', { class: 'no' }, [`${t.no}조${t.name && t.name !== `${t.no}조` ? ' ' + t.name : ''}`]),
       el('div', { class: 'mission' }, [t.mission || '(미부여)']),
@@ -206,12 +225,24 @@ function areaName(id) {
   return a ? a.name : '';
 }
 
-// 조 패널 클릭: 그 조의 임무지역이 지도 중앙에 오도록 포커싱.
-function centerMapOnTeamArea(team) {
-  if (!map || !team.areaId) return;
+// 조 패널 클릭: 그 조의 임무지역과 조원 전원의 현재 위치가 한 화면에
+// 들어오도록 지도를 맞추고, 그 조의 점만 강조한다. 같은 조를 다시
+// 클릭하면 강조를 해제한다.
+function focusTeam(team) {
+  board.focusTeam = board.focusTeam === team.no ? null : team.no;
+  renderTeams();
+  restyleAllMarkers();
+  if (!map || board.focusTeam == null) return;
+  const points = [];
   const a = board.areas.find((a) => a.id === team.areaId);
-  if (!a) return;
-  map.fitBounds([[a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[3]]], { padding: [40, 40], maxZoom: 17 });
+  if (a) points.push([a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[3]]);
+  for (const [id, p] of board.people) {
+    if (p[3] !== team.no) continue;
+    const row = board.m.get(id);
+    if (row && row[2]) points.push([row[2] / 1e5, row[3] / 1e5]);
+  }
+  if (!points.length) return;
+  map.fitBounds(points, { padding: [40, 40], maxZoom: 17 });
 }
 
 function openTeamSheet(team) {

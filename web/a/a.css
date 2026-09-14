@@ -94,6 +94,7 @@ html, body {
 }
 .team.empty { opacity: 0.35; cursor: default; border-style: dotted; }
 .team.has-left { border-width: 3px; }
+.team.focused { border-width: 4px; border-style: double; }
 .team .no { font-weight: 700; font-size: 1.1em; }
 .team .mission { font-size: 0.85em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .team .area { font-size: 0.75em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
