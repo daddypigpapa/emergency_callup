@@ -41,10 +41,14 @@ export function drawArea(area) {
   areaLayer.clearLayers();
   // No color (per design direction): the mission area is a black outline
   // with a faint black (not colored) fill so it still reads against tiles.
+  // interactive:false so the shape never captures a touch/drag that starts
+  // on top of it — without this, dragging to pan the map only works when
+  // the gesture starts outside the circle, since Leaflet vector layers are
+  // interactive (and so claim their own pointer events) by default.
   if (area.kind === 'circle') {
-    L.circle([area.lat, area.lng], { radius: area.r, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06 }).addTo(areaLayer);
+    L.circle([area.lat, area.lng], { radius: area.r, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06, interactive: false }).addTo(areaLayer);
   } else if (area.kind === 'polygon' && area.polygon) {
-    L.polygon(area.polygon, { color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06 }).addTo(areaLayer);
+    L.polygon(area.polygon, { color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06, interactive: false }).addTo(areaLayer);
   }
   if (area.nav) {
     setNav(area.nav[0], area.nav[1]);
@@ -55,8 +59,11 @@ export function setMe(lat, lng, acc) {
   if (!map) return;
   const latlng = [lat, lng];
   if (!meMarker) {
-    meMarker = L.circleMarker(latlng, { radius: 7, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 1 }).addTo(map);
-    meAccCircle = L.circle(latlng, { radius: acc || 0, color: '#111', weight: 1, opacity: 0.4, fillOpacity: 0.05 }).addTo(map);
+    // interactive:false on every overlay below for the same reason as the
+    // area shape: none of them have a click/tap behavior of their own on
+    // this screen, so they should never intercept a pan gesture.
+    meMarker = L.circleMarker(latlng, { radius: 7, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 1, interactive: false }).addTo(map);
+    meAccCircle = L.circle(latlng, { radius: acc || 0, color: '#111', weight: 1, opacity: 0.4, fillOpacity: 0.05, interactive: false }).addTo(map);
   } else {
     meMarker.setLatLng(latlng);
     meAccCircle.setLatLng(latlng);
@@ -68,7 +75,7 @@ export function setNav(lat, lng) {
   if (!map) return;
   const latlng = [lat, lng];
   if (!navMarker) {
-    navMarker = L.marker(latlng).addTo(map);
+    navMarker = L.marker(latlng, { interactive: false }).addTo(map);
   } else {
     navMarker.setLatLng(latlng);
   }

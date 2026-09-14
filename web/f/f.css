@@ -16,21 +16,24 @@
 html, body {
   margin: 0;
   height: 100%;
+  overflow: hidden; /* the field page itself must never scroll — only the map (its own pan/zoom) and sheet dialogs do */
+  overscroll-behavior: none;
   font-family: system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   word-break: keep-all;
   background: var(--paper);
   color: var(--ink);
 }
 
-.screen { height: 100dvh; }
+.screen { height: 100dvh; overflow: hidden; }
 
 /* ---- Main layout: R1/R2/R3/R4 (SPEC §8.1.2) ---- */
 #mainView {
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
-.row { min-width: 0; }
+.row { min-width: 0; min-height: 0; overflow: hidden; }
 
 .r1 {
   display: flex;
@@ -88,27 +91,34 @@ html, body {
   background: var(--paper); color: var(--ink);
   border: 1px dashed var(--line);
 }
+/* Fixed 4-column row (SPEC §8.1.2 R4: "가는길·내 위치·화면 켜두기" together
+   at the bottom of the map) — a grid instead of wrapping flex so all 4
+   buttons always stay on one row, shrinking together rather than wrapping
+   to a second row on narrow phones. */
 .map-controls {
   position: absolute;
   left: 0; right: 0; bottom: 0;
-  display: flex; flex-wrap: wrap; gap: 8px;
-  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
   background: var(--paper);
   border-top: 1px solid var(--line);
 }
 .route-btn {
-  flex: 1 1 auto;
-  min-width: 120px;
+  min-width: 0;
   text-align: center;
-  padding: 10px 12px;
+  padding: 10px 4px;
   border-radius: 0;
   border: 2px solid var(--line);
   background: var(--paper);
   color: var(--ink);
-  font-size: 0.9rem;
+  font-size: clamp(0.65rem, 3vw, 0.9rem);
   font-weight: 700;
+  line-height: 1.2;
   text-decoration: none;
   cursor: pointer;
+  overflow: hidden;
 }
 .route-btn:active { background: var(--ink); color: var(--paper); }
 .route-btn.kakao { border-style: solid; }
