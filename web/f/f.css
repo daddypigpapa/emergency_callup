@@ -13,6 +13,14 @@
 
 * { box-sizing: border-box; }
 
+/* #mainView and #idleView below set `display` via an ID selector, which
+   (same CSS origin, and ID beats the attribute selector on specificity)
+   outranks the browser's default `[hidden] { display: none }` — so toggling
+   the `hidden` attribute alone (what showOnly() in f.js does) silently
+   failed to actually hide them, leaving multiple screens laid out on top
+   of each other. This rule forces `hidden` to always win. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -26,10 +34,21 @@ html, body {
 
 .screen { height: 100dvh; overflow: hidden; }
 
-/* ---- Main layout: R1/R2/R3/R4 (SPEC §8.1.2) ---- */
+/* ---- Main layout: R1/R2/R3/R4 (SPEC §8.1.2), plus the button bar as its
+   own row after the map. All 5 rows are real grid tracks — R1-R3 and the
+   button bar size to their content (auto), the map gets exactly whatever
+   space is left (minmax(0,1fr)). This is deliberate instead of overlaying
+   the buttons on top of an inset:0 map with position:absolute: an
+   absolutely-positioned bottom bar depends on the *outer* 100dvh height
+   being exactly right on every device, and if a mobile browser's dvh
+   calculation is off even slightly, the bar silently clips out of view
+   with no scrollbar to reach it (html/body are overflow:hidden by design
+   below). Making the button row a normal, in-flow grid track means the
+   browser always renders it in full — the map simply shrinks to fit
+   around it, never the other way around. */
 #mainView {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
 
@@ -91,13 +110,14 @@ html, body {
   background: var(--paper); color: var(--ink);
   border: 1px dashed var(--line);
 }
-/* Fixed 4-column row (SPEC §8.1.2 R4: "가는길·내 위치·화면 켜두기" together
-   at the bottom of the map) — a grid instead of wrapping flex so all 4
-   buttons always stay on one row, shrinking together rather than wrapping
-   to a second row on narrow phones. */
+/* SPEC §8.1.2 R4: "가는길·내 위치·화면 켜두기" pinned below the map. A real
+   grid row of #mainView (see above) — not absolutely positioned over the
+   map — so it always renders in full at the true bottom of the screen
+   regardless of any imprecision in the map row's computed height. A grid
+   instead of wrapping flex so all 4 buttons always stay on one row,
+   shrinking together rather than wrapping to a second row on narrow
+   phones. */
 .map-controls {
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;

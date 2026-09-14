@@ -11,6 +11,15 @@
   --paper: #fff;
 }
 * { box-sizing: border-box; }
+
+/* .board below sets `display` via a class selector, which — same CSS
+   origin as the browser's default `[hidden] { display: none }` — can lose
+   the origin/specificity tie depending on source order, or an ID-based
+   rule elsewhere can outrank it outright. Force `hidden` to always win so
+   toggling it (what showOnly() in a.js does) reliably hides a screen
+   instead of leaving it laid out underneath whatever's shown on top. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0; height: 100%;
   font-family: system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
