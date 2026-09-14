@@ -45,20 +45,6 @@ html, body {
 .r3 { grid-area: r3; }
 .r4 { grid-area: r4; }
 
-/* PC 웹브라우저(넓은 화면): 조별 임무 패널(r3)을 지도(r4) 오른쪽 옆
-   세로 사이드바로 배치. 좁은 화면(휴대전화·태블릿 세로)은 위 4행 배치를
-   그대로 유지 — 손가락으로 조작하는 화면이라 세로로 쌓인 큰 탭이 더
-   누르기 쉬움. */
-@media (min-width: 900px) {
-  .board {
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
-    grid-template-rows: auto auto minmax(0, 1fr);
-    grid-template-areas: "r1 r1" "r2 r2" "r4 r3";
-  }
-  .r3 { border-left: 1px solid var(--line); overflow-y: auto; }
-  .teams { grid-template-columns: 1fr; grid-template-rows: none; }
-}
-
 .r1 {
   display: flex; align-items: center; gap: 16px; padding: 0 14px;
   background: var(--paper); color: var(--ink);
@@ -125,6 +111,26 @@ html, body {
 }
 @container (max-width: 109px) {
   .team .mission { display: none; }
+}
+
+/* PC 웹브라우저(넓은 화면): 조별 임무 패널(r3)을 지도(r4) 오른쪽 옆
+   세로 사이드바로, 조 타일은 1열종대(한 줄에 하나씩 세로로 나란히)로
+   배치. 좁은 화면(휴대전화·태블릿 세로)은 원래의 4행 배치·5x2 타일
+   그리드를 그대로 유지 — 손가락으로 조작하는 화면이라 세로로 쌓인 큰
+   탭이 더 누르기 쉬움. 이 블록이 위 .teams/.team 규칙보다 뒤에 있어야
+   같은 우선순위(class 선택자)에서 소스 순서로 이겨 실제로 적용된다. */
+@media (min-width: 900px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: "r1 r1" "r2 r2" "r4 r3";
+  }
+  .r3 { border-left: 1px solid var(--line); overflow-y: auto; }
+  .teams {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-auto-rows: minmax(64px, auto);
+  }
 }
 
 .r4 { position: relative; background: var(--paper); border-top: 1px solid var(--line); }
