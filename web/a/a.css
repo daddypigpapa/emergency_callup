@@ -131,7 +131,12 @@ html, body {
     grid-template-columns: 1fr;
     grid-template-rows: none;
     grid-auto-rows: auto;
+    /* Grid's default align-content (stretch) hands the sidebar's leftover
+       height to the auto rows, inflating every tile well past its text.
+       start = each row is exactly as tall as its content. */
+    align-content: start;
   }
+  .team { padding: 4px 8px; }
   /* .team normally relies on container-type:size so @container queries can
      hide the mission/area lines on the narrow mobile 5-column grid, but
      that same containment also stops the browser from measuring the
