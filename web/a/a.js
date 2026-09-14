@@ -179,7 +179,10 @@ function renderTeams() {
   clearChildren(els.teamsGrid);
   for (const t of board.teams) {
     const agg = aggregateTeam(t.no);
-    const tile = el('div', { class: 'team' + (agg.left > 0 ? ' has-left' : ''), onclick: () => openTeamSheet(t) }, [
+    const tile = el('div', {
+      class: 'team' + (agg.left > 0 ? ' has-left' : ''),
+      onclick: () => { centerMapOnTeamArea(t); openTeamSheet(t); },
+    }, [
       el('div', { class: 'no' }, [`${t.no}조${t.name && t.name !== `${t.no}조` ? ' ' + t.name : ''}`]),
       el('div', { class: 'mission' }, [t.mission || '(미부여)']),
       el('div', { class: 'area' }, [areaName(t.areaId)]),
@@ -201,6 +204,14 @@ function renderTeams() {
 function areaName(id) {
   const a = board.areas.find((a) => a.id === id);
   return a ? a.name : '';
+}
+
+// 조 패널 클릭: 그 조의 임무지역이 지도 중앙에 오도록 포커싱.
+function centerMapOnTeamArea(team) {
+  if (!map || !team.areaId) return;
+  const a = board.areas.find((a) => a.id === team.areaId);
+  if (!a) return;
+  map.fitBounds([[a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[3]]], { padding: [40, 40], maxZoom: 17 });
 }
 
 function openTeamSheet(team) {

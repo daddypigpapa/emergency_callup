@@ -129,8 +129,18 @@ html, body {
   .teams {
     grid-template-columns: 1fr;
     grid-template-rows: none;
-    grid-auto-rows: minmax(64px, auto);
+    grid-auto-rows: auto;
   }
+  /* .team normally relies on container-type:size so @container queries can
+     hide the mission/area lines on the narrow mobile 5-column grid, but
+     that same containment also stops the browser from measuring the
+     tile's own content height — so grid-auto-rows: auto had nothing to
+     size against and every tile collapsed to a sliver with all 5 lines
+     (조 번호/임무/지역/진행바/현황) drawn on top of each other. The
+     sidebar column is always wide enough that those @container rules
+     never fire anyway, so it's safe to drop containment here and let the
+     tile size itself to its actual content. */
+  .team { container-type: normal; }
 }
 
 .r4 { position: relative; background: var(--paper); border-top: 1px solid var(--line); }
