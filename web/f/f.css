@@ -93,8 +93,27 @@ html, body {
 }
 .r3-mission { font-weight: 700; }
 .team-name { font-weight: 700; text-decoration: underline; }
-.r3-area { color: var(--muted); margin-top: 2px; }
+.r3-area {
+  color: var(--muted);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .sep { margin: 0 4px; color: var(--faint); }
+.dest-btn {
+  flex: none;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dest-btn:active { background: var(--ink); color: var(--paper); }
 
 .r4 {
   position: relative;

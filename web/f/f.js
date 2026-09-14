@@ -27,6 +27,7 @@ const els = {
   kakaoBtn: document.getElementById('kakaoBtn'),
   naverBtn: document.getElementById('naverBtn'),
   meBtn: document.getElementById('meBtn'),
+  destBtn: document.getElementById('destBtn'),
   wakeBtn: document.getElementById('wakeBtn'),
   consentSheet: document.getElementById('consentSheet'),
   consentAllowBtn: document.getElementById('consentAllowBtn'),
@@ -162,7 +163,18 @@ function ensureMap(area) {
     mapReady = true;
   }
   fieldMap.drawArea(area);
-  fieldMap.fitArea(area.bbox);
+  // A new area (first load, or after a mission/area change confirmed via
+  // the ack modal) always reframes. If we already have a GPS reading by
+  // then (e.g. an area change mid-mission), show both together right away
+  // rather than resetting to an area-only view the user would have to
+  // press [목적지]/[내 위치] again just to undo.
+  if (state.lastPos) {
+    fieldMap.fitAreaAndMe(area.bbox, state.lastPos.lat, state.lastPos.lng);
+    state.meFitShowsMe = true;
+  } else {
+    fieldMap.fitArea(area.bbox);
+    state.meFitShowsMe = false;
+  }
 }
 
 // ---- Consent sheet (once per incident) ----
@@ -183,7 +195,7 @@ function maybeShowConsentSheet(incidentId, st) {
         // Show the position immediately rather than waiting for the loop's
         // first watchPosition tick — the user just granted permission and
         // should see their dot appear right away.
-        fieldMap.setMe(pos.coords.latitude, pos.coords.longitude, Math.round(pos.coords.accuracy));
+        applyPosition(pos.coords.latitude, pos.coords.longitude, Math.round(pos.coords.accuracy));
         await api.post('/f/consent', { granted: true, textVer: '2026-09-v1' });
         startLoopIfNeeded();
       },
@@ -209,8 +221,7 @@ function startLoopIfNeeded() {
       // isn't posted to the server. Previously nothing ever called
       // fieldMap.setMe() at all, so the dot never appeared no matter how
       // long location tracking ran.
-      state.lastPos = { lat: fix.lat, lng: fix.lng };
-      fieldMap.setMe(fix.lat, fix.lng, fix.acc);
+      applyPosition(fix.lat, fix.lng, fix.acc);
     },
     onStatus: (status, detail) => {
       if (status === 'offline') {
@@ -278,29 +289,50 @@ function showAckModal() {
   };
 }
 
-// ---- Buttons ----
-// SPEC §8.1.3: "[내 위치] 버튼: 임무지역+내 위치를 함께 맞춤. 다시 누르면
-// 임무지역만." A real GPS position is almost never inside the (often small,
-// e.g. 100–150m) mission-area circle the map starts framed on, so without
-// this the live position dot renders off-screen with nothing telling the
-// user it exists — indistinguishable from "위치를 못 잡는다".
-els.meBtn.addEventListener('click', () => {
+// ---- Position handling / map framing ----
+// applyPosition() is the single place a raw GPS reading turns into map
+// state, called both from the initial consent-grant getCurrentPosition and
+// from every LocationLoop tick. On the very first reading we know about for
+// this mission, it auto-frames the view to show both the mission area and
+// the user's position together (requested behavior: "최초화면은 내
+// 현재위치와 임무지역을 한 화면 안에 모두 표시") instead of leaving the
+// user staring at an area-only view with no indication their dot exists.
+// Later readings only move the dot — the view doesn't keep re-centering
+// itself as the user walks, which would be disorienting.
+function applyPosition(lat, lng, acc) {
+  const isFirst = !state.lastPos;
+  state.lastPos = { lat, lng };
+  fieldMap.setMe(lat, lng, acc);
+  if (isFirst && state.task) {
+    fieldMap.fitAreaAndMe(state.task.area.bbox, lat, lng);
+    state.meFitShowsMe = true;
+  }
+}
+
+// SPEC §8.1.3 / this feature request: [내 위치] and R3's [목적지] both
+// toggle between "area + me together" and "area only, centered" — sharing
+// one state so either button reflects what the other just did.
+function toggleAreaMeFit() {
   if (!state.task) return;
-  if (state.lastPos) {
-    if (state.meFitShowsMe) {
-      fieldMap.fitArea(state.task.area.bbox);
-      state.meFitShowsMe = false;
-    } else {
-      fieldMap.fitAreaAndMe(state.task.area.bbox, state.lastPos.lat, state.lastPos.lng);
-      state.meFitShowsMe = true;
-    }
-  } else {
+  if (!state.lastPos) {
     // No GPS reading yet (e.g. still waiting on the permission prompt or
     // the first fix) — nothing to add to the view yet, but re-centering on
     // the area is still useful feedback that the button did something.
     fieldMap.fitArea(state.task.area.bbox);
+    return;
   }
-});
+  if (state.meFitShowsMe) {
+    fieldMap.fitArea(state.task.area.bbox);
+    state.meFitShowsMe = false;
+  } else {
+    fieldMap.fitAreaAndMe(state.task.area.bbox, state.lastPos.lat, state.lastPos.lng);
+    state.meFitShowsMe = true;
+  }
+}
+
+// ---- Buttons ----
+els.meBtn.addEventListener('click', toggleAreaMeFit);
+els.destBtn.addEventListener('click', toggleAreaMeFit);
 
 els.wakeBtn.addEventListener('click', async () => {
   state.wakeOn = !state.wakeOn;
