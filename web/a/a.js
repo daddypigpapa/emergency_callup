@@ -84,26 +84,38 @@ function areaLayerStyleFor() { return { color: '#111', weight: 2, fillColor: '#1
 
 function redrawAreas() {
   layerGroup.eachLayer((l) => { if (l._isAreaShape) layerGroup.removeLayer(l); });
-  const bounds = [];
   for (const a of board.areas) {
     let shape;
     if (a.kind === 'circle') {
       shape = L.circle([a.lat, a.lng], Object.assign({ radius: a.r }, areaLayerStyleFor()));
-      bounds.push(...L.circle([a.lat, a.lng], { radius: a.r }).getBounds ? [] : []);
     } else if (a.polygon) {
       shape = L.polygon(a.polygon, areaLayerStyleFor());
     }
     if (shape) { shape._isAreaShape = true; shape.addTo(layerGroup); }
   }
-  if (board.areas.length && board._areasBoundsDirty !== false) {
-    const allBounds = board.areas.map((a) => a.bbox);
-    const south = Math.min(...allBounds.map((b) => b[0]));
-    const west = Math.min(...allBounds.map((b) => b[1]));
-    const north = Math.max(...allBounds.map((b) => b[2]));
-    const east = Math.max(...allBounds.map((b) => b[3]));
-    map.fitBounds([[south, west], [north, east]], { padding: [16, 16] });
-    board._areasBoundsDirty = false;
+}
+
+// Only re-fit the view when there's an actual reason to (first load, or the
+// mission area itself changed) — not on every 3-second poll. buildBoardPayload
+// sends the full area list on every snapshot AND every delta (it's not
+// diffed server-side), so without this the map used to call fitBounds()
+// every poll and silently undo any zoom/pan the admin had just done.
+// Includes everyone's last known position (not just the area shape) so a
+// person who has wandered outside the mission area is still inside the
+// initial view instead of being invisibly off-screen.
+function maybeFitBounds() {
+  if (!board._boundsDirty) return;
+  const points = [];
+  for (const a of board.areas) {
+    points.push([a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[3]]);
   }
+  for (const row of board.m.values()) {
+    const [, , lat5, lng5] = row;
+    if (lat5) points.push([lat5 / 1e5, lng5 / 1e5]);
+  }
+  if (!points.length) return;
+  map.fitBounds(points, { padding: [24, 24] });
+  board._boundsDirty = false;
 }
 
 // No color: every state below is black/white, told apart by fill vs
@@ -290,7 +302,11 @@ function applyBoard(data, full) {
   board.seq = data.seq;
   if (data.incident !== undefined) board.incident = data.incident;
   if (data.teams && data.teams.length) board.teams = data.teams;
-  if (data.areas && data.areas.length) { board.areas = data.areas; board._areasBoundsDirty = true; }
+  if (data.areas && data.areas.length) {
+    const sig = JSON.stringify(data.areas.map((a) => [a.id, a.kind, a.lat, a.lng, a.r, a.polygon]));
+    if (sig !== board._areasSignature) { board._areasSignature = sig; board._boundsDirty = true; }
+    board.areas = data.areas;
+  }
   if (full) { board.people = new Map(); board.m = new Map(); }
   for (const p of data.people || []) board.people.set(p[0], p);
   for (const row of data.m || []) board.m.set(row[0], row);
@@ -300,6 +316,7 @@ function applyBoard(data, full) {
   if (map) {
     if (full || data.areas?.length) redrawAreas();
     for (const row of data.m || []) upsertMarker(row);
+    maybeFitBounds();
   }
 }
 
