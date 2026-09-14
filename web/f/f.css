@@ -120,8 +120,18 @@ html, body {
   min-height: 0;
 }
 /* A visible outline so the map area reads as "a map" (framed region) even
-   before/without tiles loading — e.g. no VWorld key configured yet. */
-.map { position: absolute; inset: 0; border: 1px solid var(--line); }
+   before/without tiles loading — e.g. no VWorld key configured yet.
+   touch-action:none is the actual drag fix: Leaflet only gets a chance to
+   pan the map on a touch device by fully handling the gesture itself, and
+   it only claims that right by adding its own touch-action CSS classes
+   *if* its touch/drag detection fires correctly. When it doesn't, the
+   container is left at the browser default (touch-action: auto), and the
+   page-level overflow:hidden/overscroll-behavior:none we rely on to stop
+   the *page* from scrolling then also swallows the drag gesture before
+   Leaflet ever sees it — the map just sits there. Setting it explicitly
+   here guarantees every touch on the map is routed to Leaflet's own
+   handlers regardless of that detection. */
+.map { position: absolute; inset: 0; border: 1px solid var(--line); touch-action: none; }
 .map-fallback {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;

@@ -46,8 +46,13 @@ const state = {
   loop: null,
   connLostSince: null,
   wakeOn: false,
-  lastPos: null, // {lat, lng} — most recent raw GPS reading, for [내 위치]
-  meFitShowsMe: false, // SPEC §8.1.3: [내 위치] toggles area-only vs area+me
+  lastPos: null, // {lat, lng} — most recent raw GPS reading, for [내 위치]/[목적지]
+  // Map framing mode: 'both' (area + me together, the default), 'me'
+  // ([내 위치] pressed — centered tight on my position), or 'area'
+  // ([목적지] pressed — centered on the mission area). Pressing the button
+  // for the mode already active switches back to 'both'; pressing the
+  // other button always jumps straight to its own mode.
+  viewMode: 'both',
 };
 
 function showOnly(view) {
@@ -164,16 +169,15 @@ function ensureMap(area) {
   }
   fieldMap.drawArea(area);
   // A new area (first load, or after a mission/area change confirmed via
-  // the ack modal) always reframes. If we already have a GPS reading by
-  // then (e.g. an area change mid-mission), show both together right away
-  // rather than resetting to an area-only view the user would have to
-  // press [목적지]/[내 위치] again just to undo.
+  // the ack modal) always reframes back to the default "both" view. If we
+  // already have a GPS reading by then (e.g. an area change mid-mission),
+  // show both together right away rather than resetting to an area-only
+  // view the user would have to press a button again just to undo.
+  state.viewMode = 'both';
   if (state.lastPos) {
     fieldMap.fitAreaAndMe(area.bbox, state.lastPos.lat, state.lastPos.lng);
-    state.meFitShowsMe = true;
   } else {
     fieldMap.fitArea(area.bbox);
-    state.meFitShowsMe = false;
   }
 }
 
@@ -305,34 +309,41 @@ function applyPosition(lat, lng, acc) {
   fieldMap.setMe(lat, lng, acc);
   if (isFirst && state.task) {
     fieldMap.fitAreaAndMe(state.task.area.bbox, lat, lng);
-    state.meFitShowsMe = true;
+    state.viewMode = 'both';
   }
 }
 
-// SPEC §8.1.3 / this feature request: [내 위치] and R3's [목적지] both
-// toggle between "area + me together" and "area only, centered" — sharing
-// one state so either button reflects what the other just did.
-function toggleAreaMeFit() {
-  if (!state.task) return;
-  if (!state.lastPos) {
-    // No GPS reading yet (e.g. still waiting on the permission prompt or
-    // the first fix) — nothing to add to the view yet, but re-centering on
-    // the area is still useful feedback that the button did something.
-    fieldMap.fitArea(state.task.area.bbox);
-    return;
-  }
-  if (state.meFitShowsMe) {
-    fieldMap.fitArea(state.task.area.bbox);
-    state.meFitShowsMe = false;
-  } else {
+// [내 위치]: focuses tight on my current position. Pressed again (i.e.
+// already focused on me) goes back to showing area+me together.
+function onMeBtnClick() {
+  if (!state.task || !state.lastPos) return; // nothing to center on yet
+  if (state.viewMode === 'me') {
     fieldMap.fitAreaAndMe(state.task.area.bbox, state.lastPos.lat, state.lastPos.lng);
-    state.meFitShowsMe = true;
+    state.viewMode = 'both';
+  } else {
+    fieldMap.centerOnMe(state.lastPos.lat, state.lastPos.lng);
+    state.viewMode = 'me';
+  }
+}
+
+// [목적지]: focuses on the mission area. Pressed again (i.e. already
+// focused on the area) goes back to showing area+me together — or, if we
+// don't have a position yet, there's nothing to add, so it just re-fits
+// the area again.
+function onDestBtnClick() {
+  if (!state.task) return;
+  if (state.viewMode === 'area' && state.lastPos) {
+    fieldMap.fitAreaAndMe(state.task.area.bbox, state.lastPos.lat, state.lastPos.lng);
+    state.viewMode = 'both';
+  } else {
+    fieldMap.fitArea(state.task.area.bbox);
+    state.viewMode = 'area';
   }
 }
 
 // ---- Buttons ----
-els.meBtn.addEventListener('click', toggleAreaMeFit);
-els.destBtn.addEventListener('click', toggleAreaMeFit);
+els.meBtn.addEventListener('click', onMeBtnClick);
+els.destBtn.addEventListener('click', onDestBtnClick);
 
 els.wakeBtn.addEventListener('click', async () => {
   state.wakeOn = !state.wakeOn;

@@ -17,7 +17,10 @@ let tileErrorCount = 0;
 let tileErrorCb = null;
 
 export function init(container, tileUrl, tileAttribution) {
-  map = L.map(container, { zoomControl: true, attributionControl: true });
+  // dragging/touchZoom explicit (they default to true, but this screen's
+  // draggability is exactly the thing users have reported broken, so make
+  // the intent unmissable rather than relying on Leaflet's defaults).
+  map = L.map(container, { zoomControl: true, attributionControl: true, dragging: true, touchZoom: true });
   const layer = L.tileLayer(tileUrl, { attribution: tileAttribution || '', maxZoom: 19 });
   layer.on('tileerror', () => {
     tileErrorCount++;
@@ -25,6 +28,15 @@ export function init(container, tileUrl, tileAttribution) {
   });
   layer.addTo(map);
   areaLayer = L.layerGroup().addTo(map);
+
+  // ensureMap() in f.js runs right after this screen is un-hidden, in the
+  // same tick — the browser hasn't necessarily finished laying out the
+  // now-visible container yet, so Leaflet can measure it as the wrong (or
+  // zero) size and derive a broken internal pixel origin/pan boundary from
+  // that. invalidateSize() once the layout has actually settled corrects
+  // it; harmless to call if the size was already right.
+  requestAnimationFrame(() => { if (map) map.invalidateSize(); });
+
   return map;
 }
 
@@ -33,6 +45,12 @@ export function fitArea(bbox) {
   if (!map) return;
   const bounds = L.latLngBounds([bbox[0], bbox[1]], [bbox[2], bbox[3]]);
   map.fitBounds(bounds, { padding: [24, 24], maxZoom: 18 });
+}
+
+/** [내 위치]: center tightly on the live position (not the mission area). */
+export function centerOnMe(lat, lng) {
+  if (!map) return;
+  map.setView([lat, lng], 17);
 }
 
 /** area = the `task.area` object from GET /f/me (SPEC §7.2). */
