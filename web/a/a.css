@@ -34,11 +34,30 @@ html, body {
   overflow: hidden;
   display: grid;
   grid-template-rows: minmax(0, 6fr) minmax(0, 8fr) minmax(0, 34fr) minmax(0, 52fr);
+  grid-template-areas: "r1" "r2" "r3" "r4";
   font-size: clamp(10px, 1.6vmin, 18px);
   background: var(--paper);
   color: var(--ink);
 }
 .board > * { min-height: 0; overflow: hidden; }
+.r1 { grid-area: r1; }
+.r2 { grid-area: r2; }
+.r3 { grid-area: r3; }
+.r4 { grid-area: r4; }
+
+/* PC 웹브라우저(넓은 화면): 조별 임무 패널(r3)을 지도(r4) 오른쪽 옆
+   세로 사이드바로 배치. 좁은 화면(휴대전화·태블릿 세로)은 위 4행 배치를
+   그대로 유지 — 손가락으로 조작하는 화면이라 세로로 쌓인 큰 탭이 더
+   누르기 쉬움. */
+@media (min-width: 900px) {
+  .board {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-areas: "r1 r1" "r2 r2" "r4 r3";
+  }
+  .r3 { border-left: 1px solid var(--line); overflow-y: auto; }
+  .teams { grid-template-columns: 1fr; grid-template-rows: none; }
+}
 
 .r1 {
   display: flex; align-items: center; gap: 16px; padding: 0 14px;
