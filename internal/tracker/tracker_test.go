@@ -37,7 +37,7 @@ func newHarness(t *testing.T) *harness {
 	al := audit.New(db.DB)
 	areas := area.NewStore(db.DB)
 	members := roster.NewStore(db.DB, auth.NewHasher())
-	incidents := incident.NewStore(db.DB, al)
+	incidents := incident.NewStore(db.DB, al, areas, incident.NewPlanStore(db.DB))
 	tr := New(db.DB, incidents, areas, al)
 	return &harness{tracker: tr, incident: incidents, members: members, areas: areas, db: db}
 }

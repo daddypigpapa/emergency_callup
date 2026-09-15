@@ -57,7 +57,7 @@ func TestBuildDraft_MajorityAndTieBreak(t *testing.T) {
 	_ = mustMember(t, members, 3, "차단선 구축", a1, "00000002")
 	m3 := mustMember(t, members, 3, "구조 지원", a2, "00000003")
 
-	d, err := BuildDraft(context.Background(), db.DB)
+	d, err := BuildDraft(context.Background(), db.DB, nil)
 	if err != nil {
 		t.Fatalf("build draft: %v", err)
 	}
@@ -86,7 +86,7 @@ func TestBuildDraft_TieBreakBySmallestMemberID(t *testing.T) {
 	mustMember(t, members, 5, "임무X", a1, "00000010") // smaller id
 	mustMember(t, members, 5, "임무Y", a2, "00000011") // larger id
 
-	d, err := BuildDraft(context.Background(), db.DB)
+	d, err := BuildDraft(context.Background(), db.DB, nil)
 	if err != nil {
 		t.Fatalf("build draft: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestBuildDraft_EmptyTeamFlaggedIncomplete(t *testing.T) {
 	members := roster.NewStore(db.DB, auth.NewHasher())
 	mustMember(t, members, 7, "", 0, "00000020")
 
-	d, err := BuildDraft(context.Background(), db.DB)
+	d, err := BuildDraft(context.Background(), db.DB, nil)
 	if err != nil {
 		t.Fatalf("build draft: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestBuildDraft_BlankMemberFollowsTeamDefault(t *testing.T) {
 	mustMember(t, members, 9, "차단선 구축", a1, "00000030")
 	mustMember(t, members, 9, "", 0, "00000031") // blank -> follows default, no override
 
-	d, err := BuildDraft(context.Background(), db.DB)
+	d, err := BuildDraft(context.Background(), db.DB, nil)
 	if err != nil {
 		t.Fatalf("build draft: %v", err)
 	}

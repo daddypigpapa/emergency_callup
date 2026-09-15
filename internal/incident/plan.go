@@ -17,14 +17,16 @@ const MaxCheckpoints = 10
 
 var ErrTooManyCheckpoints = fmt.Errorf("incident: a team may have at most %d checkpoints", MaxCheckpoints)
 
-// Checkpoint mirrors one row of the `checkpoint` table.
+// Checkpoint mirrors one row of the `checkpoint` table. JSON tags matter
+// here: the same struct is marshaled into team_task.checkpoints as the
+// incident-open/team-task-update snapshot (docs/SPEC_AREA_EDITOR.md §3.5).
 type Checkpoint struct {
-	Seq     int
-	Name    string
-	Lat     float64
-	Lng     float64
-	Addr    string
-	RadiusM int
+	Seq     int     `json:"seq"`
+	Name    string  `json:"name"`
+	Lat     float64 `json:"lat"`
+	Lng     float64 `json:"lng"`
+	Addr    string  `json:"addr,omitempty"`
+	RadiusM int     `json:"r"`
 }
 
 // TeamPlan mirrors `team_plan` plus its checkpoints — the pre-registered

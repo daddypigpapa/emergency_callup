@@ -15,7 +15,8 @@ func setup(t *testing.T) (*Store, *roster.Store, *area.Store) {
 	t.Helper()
 	db := testDB(t)
 	a := audit.New(db.DB)
-	return NewStore(db.DB, a), roster.NewStore(db.DB, auth.NewHasher()), area.NewStore(db.DB)
+	areas := area.NewStore(db.DB)
+	return NewStore(db.DB, a, areas, NewPlanStore(db.DB)), roster.NewStore(db.DB, auth.NewHasher()), areas
 }
 
 func TestOpen_CreatesAssignmentsForTeamMembers(t *testing.T) {

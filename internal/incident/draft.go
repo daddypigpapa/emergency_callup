@@ -6,7 +6,7 @@ import (
 )
 
 // TeamDraft is one team's auto-computed default for the new-incident
-// preview (SPEC §5.4).
+// preview (SPEC §5.4, extended by docs/SPEC_AREA_EDITOR.md §4.5).
 type TeamDraft struct {
 	TeamNo            int64
 	Mission           string // "" if no usable peacetime default exists
@@ -14,6 +14,7 @@ type TeamDraft struct {
 	MissionIncomplete bool   // true: every member's peacetime mission was empty
 	AreaIncomplete    bool   // true: every member's peacetime area was empty
 	MemberCount       int
+	FromPlan          bool // true: Mission and/or AreaID came from the team's pre-registered plan, not the §5.4 majority vote
 }
 
 // MemberOverrideDraft is one member whose peacetime mission/area differs
@@ -45,7 +46,20 @@ type memberPeacetime struct {
 // member, the team default is the most common non-empty peacetime value
 // (ties broken by the smallest member ID); members whose own peacetime
 // value differs from that default become individual overrides.
-func BuildDraft(ctx context.Context, db *sql.DB) (*Draft, error) {
+//
+// docs/SPEC_AREA_EDITOR.md §4.5 adds a priority step in front of that: if
+// the team has a pre-registered plan with a non-empty mission and/or area,
+// that value replaces the §5.4 majority-vote default before per-member
+// overrides are computed — so a member whose peacetime value happens to
+// match the (now-superseded) majority default but not the plan still gets
+// flagged as an override, not silently absorbed into the new default.
+// plans may be nil/empty (no plan for any team).
+func BuildDraft(ctx context.Context, db *sql.DB, plans []TeamPlan) (*Draft, error) {
+	planByTeam := make(map[int64]TeamPlan, len(plans))
+	for _, p := range plans {
+		planByTeam[p.TeamNo] = p
+	}
+
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, name, team_no, COALESCE(mission,''), COALESCE(area_id,0)
 		 FROM member WHERE active = 1 AND team_no IS NOT NULL ORDER BY team_no, id`)
@@ -76,10 +90,20 @@ func BuildDraft(ctx context.Context, db *sql.DB) (*Draft, error) {
 		defMission, missionIncomplete := modeString(members)
 		defArea, areaIncomplete := modeArea(members)
 
+		fromPlan := false
+		if plan, ok := planByTeam[teamNo]; ok {
+			if plan.Mission != "" {
+				defMission, missionIncomplete, fromPlan = plan.Mission, false, true
+			}
+			if plan.AreaID != 0 {
+				defArea, areaIncomplete, fromPlan = plan.AreaID, false, true
+			}
+		}
+
 		d.Teams = append(d.Teams, TeamDraft{
 			TeamNo: teamNo, Mission: defMission, AreaID: defArea,
 			MissionIncomplete: missionIncomplete, AreaIncomplete: areaIncomplete,
-			MemberCount: len(members),
+			MemberCount: len(members), FromPlan: fromPlan,
 		})
 
 		for _, m := range members {

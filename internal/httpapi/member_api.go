@@ -98,6 +98,19 @@ func (s *Server) handleMemberMe(w http.ResponseWriter, r *http.Request) {
 	}
 	n := tracker.NextInterval(st, ar.REq()*10+1000, ar.REq(), false)
 
+	// The team's pre-registered rally point (docs/SPEC_AREA_EDITOR.md §3.5)
+	// replaces the area's own nav as the field screen's "가는길" target —
+	// but not for a member with a personal area override, since the rally
+	// point was snapshotted for the *team's* area, not theirs.
+	areaBody := areaJSON(ar)
+	if asg.AreaOverrideID == nil {
+		areaBody["nav"] = [2]float64{teamTask.RallyLat, teamTask.RallyLng}
+	}
+	cps := make([][4]any, len(teamTask.Checkpoints))
+	for i, cp := range teamTask.Checkpoints {
+		cps[i] = [4]any{cp.Seq, cp.Name, cp.Lat, cp.Lng}
+	}
+
 	writeJSON(w, map[string]any{
 		"t": now.UnixMilli(),
 		"incident": map[string]any{
@@ -109,7 +122,7 @@ func (s *Server) handleMemberMe(w http.ResponseWriter, r *http.Request) {
 		},
 		"task": map[string]any{
 			"mission": asg.EffMission, "teamMission": teamTask.Mission,
-			"mv": asg.MissionVer, "ackVer": asg.AckVer, "area": areaJSON(ar),
+			"mv": asg.MissionVer, "ackVer": asg.AckVer, "area": areaBody, "cps": cps,
 		},
 		"st": st,
 		"n":  n,

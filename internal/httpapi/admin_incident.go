@@ -69,7 +69,14 @@ func (s *Server) buildBoardPayload(w http.ResponseWriter, r *http.Request, since
 	}
 	teams := make([]any, 0, len(teamTasks))
 	for _, tt := range teamTasks {
-		teams = append(teams, map[string]any{"no": tt.TeamNo, "name": s.teamName(ctx, tt.TeamNo), "mission": tt.Mission, "areaId": tt.AreaID, "ver": tt.Version})
+		cps := make([][3]any, len(tt.Checkpoints))
+		for i, cp := range tt.Checkpoints {
+			cps[i] = [3]any{cp.Seq, cp.Lat, cp.Lng}
+		}
+		teams = append(teams, map[string]any{
+			"no": tt.TeamNo, "name": s.teamName(ctx, tt.TeamNo), "mission": tt.Mission, "areaId": tt.AreaID, "ver": tt.Version,
+			"rally": [2]float64{tt.RallyLat, tt.RallyLng}, "cps": cps,
+		})
 	}
 	body["teams"] = teams
 
@@ -133,6 +140,26 @@ func (s *Server) buildBoardPayload(w http.ResponseWriter, r *http.Request, since
 	writeJSON(w, body)
 }
 
+// rallyJSON/checkpointsJSON render one team's pre-registered plan fields
+// for the new-incident preview (docs/SPEC_AREA_EDITOR.md §4.5). rallyJSON
+// returns nil when the plan leaves the rally point automatic (no lat/lng
+// saved) — the actual auto-resolved point is only computed at incident
+// open/team-task-update time (SPEC_AREA_EDITOR.md §3.5), not here.
+func rallyJSON(p incident.TeamPlan) any {
+	if p.RallyLat == nil || p.RallyLng == nil {
+		return nil
+	}
+	return map[string]any{"lat": *p.RallyLat, "lng": *p.RallyLng, "addr": p.RallyAddr}
+}
+
+func checkpointsJSON(p incident.TeamPlan) []any {
+	out := make([]any, 0, len(p.Checkpoints))
+	for _, cp := range p.Checkpoints {
+		out = append(out, map[string]any{"seq": cp.Seq, "name": cp.Name, "lat": cp.Lat, "lng": cp.Lng, "addr": cp.Addr, "r": cp.RadiusM})
+	}
+	return out
+}
+
 func polygonJSON(a *area.Row) any {
 	if a.Kind != area.KindPolygon {
 		return nil
@@ -187,19 +214,32 @@ func (s *Server) handleDelta(w http.ResponseWriter, r *http.Request) {
 	s.buildBoardPayload(w, r, &since)
 }
 
-// handleIncidentDraft implements GET /a/incidents/draft (SPEC §5.4, §7.3).
+// handleIncidentDraft implements GET /a/incidents/draft (SPEC §5.4, §7.3,
+// docs/SPEC_AREA_EDITOR.md §4.5).
 func (s *Server) handleIncidentDraft(w http.ResponseWriter, r *http.Request) {
 	now := s.Now()
-	draft, err := incident.BuildDraft(r.Context(), s.DB.DB)
+	plans, err := s.Plans.List(r.Context())
+	if err != nil {
+		writeError(w, now, "server", "서버 오류가 발생했습니다.")
+		return
+	}
+	planByTeam := make(map[int64]incident.TeamPlan, len(plans))
+	for _, p := range plans {
+		planByTeam[p.TeamNo] = p
+	}
+
+	draft, err := incident.BuildDraft(r.Context(), s.DB.DB, plans)
 	if err != nil {
 		writeError(w, now, "server", "서버 오류가 발생했습니다.")
 		return
 	}
 	teams := make([]any, 0, len(draft.Teams))
 	for _, t := range draft.Teams {
+		plan := planByTeam[t.TeamNo]
 		teams = append(teams, map[string]any{
 			"no": t.TeamNo, "mission": t.Mission, "areaId": t.AreaID,
 			"missionIncomplete": t.MissionIncomplete, "areaIncomplete": t.AreaIncomplete, "memberCount": t.MemberCount,
+			"fromPlan": t.FromPlan, "rally": rallyJSON(plan), "checkpoints": checkpointsJSON(plan),
 		})
 	}
 	overrides := make([]any, 0, len(draft.Overrides))

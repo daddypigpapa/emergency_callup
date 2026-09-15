@@ -71,7 +71,8 @@ func NewServer(cfg *config.Config, db *store.DB) *Server {
 	auditLog := audit.New(db.DB)
 	areas := area.NewStore(db.DB)
 	members := roster.NewStore(db.DB, hasher)
-	incidents := incident.NewStore(db.DB, auditLog)
+	plans := incident.NewPlanStore(db.DB)
+	incidents := incident.NewStore(db.DB, auditLog, areas, plans)
 
 	var httpProvider sms.Provider
 	if cfg.SMSHTTPEnabled() {
@@ -99,7 +100,7 @@ func NewServer(cfg *config.Config, db *store.DB) *Server {
 		Tracker:   tracker.New(db.DB, incidents, areas, auditLog),
 		SMS:       sms.NewService(db.DB, httpProvider, auditLog),
 		Settings:  settings.NewStore(db.DB),
-		Plans:     incident.NewPlanStore(db.DB),
+		Plans:     plans,
 		Geo:       geo.NewClient(""),
 		geoCache:  map[string]geoCacheEntry{},
 		Now:       time.Now,
@@ -162,6 +163,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/a/geo/cell", s.requireAdminSession(auth.RoleAdmin, s.handleGeoCell))
 	mux.HandleFunc("GET /api/v1/a/geo/admin", s.requireAdminSession(auth.RoleAdmin, s.handleGeoAdmin))
 	mux.HandleFunc("GET /api/v1/a/geo/geocode", s.requireAdminSession(auth.RoleAdmin, s.handleGeoGeocode))
+	mux.HandleFunc("GET /api/v1/a/team-plans", s.requireAdminSession(auth.RoleOperator, s.handleTeamPlansList))
+	mux.HandleFunc("PUT /api/v1/a/team-plans", s.requireAdminSession(auth.RoleAdmin, s.handleTeamPlansSave))
 	mux.HandleFunc("GET /api/v1/a/presets", s.requireAdminSession(auth.RoleAdmin, s.handlePresetsList))
 	mux.HandleFunc("POST /api/v1/a/presets", s.requireAdminSession(auth.RoleAdmin, s.handlePresetCreate))
 	mux.HandleFunc("PUT /api/v1/a/presets/{id}", s.requireAdminSession(auth.RoleAdmin, s.handlePresetUpdate))

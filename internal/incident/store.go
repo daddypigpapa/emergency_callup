@@ -3,9 +3,11 @@ package incident
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
+	"emergencycallup/internal/area"
 	"emergencycallup/internal/audit"
 )
 
@@ -13,9 +15,53 @@ import (
 type Store struct {
 	db    *sql.DB
 	audit *audit.Log
+	areas *area.Store
+	plans *PlanStore
 }
 
-func NewStore(db *sql.DB, a *audit.Log) *Store { return &Store{db: db, audit: a} }
+func NewStore(db *sql.DB, a *audit.Log, areas *area.Store, plans *PlanStore) *Store {
+	return &Store{db: db, audit: a, areas: areas, plans: plans}
+}
+
+// teamSnapshot is a team's rally point + checkpoints, resolved from its
+// pre-registered plan (if any targets the same area) or defaulted from the
+// area's own nav point (docs/SPEC_AREA_EDITOR.md §3.5). Resolved with plain
+// (non-transactional) queries *before* any INSERT/UPDATE transaction opens,
+// since this package's *sql.DB is capped at one open connection
+// (internal/store/store.go) and a second query through s.areas/s.plans
+// while a transaction holds that single connection would simply hang.
+type teamSnapshot struct {
+	rallyLat, rallyLng float64
+	checkpointsJSON    *string
+}
+
+func (s *Store) resolveTeamSnapshot(ctx context.Context, teamNo, areaID int64) (teamSnapshot, error) {
+	ar, err := s.areas.GetByID(ctx, areaID)
+	if err != nil {
+		return teamSnapshot{}, err
+	}
+	snap := teamSnapshot{rallyLat: ar.NavLat, rallyLng: ar.NavLng}
+
+	plan, err := s.plans.Get(ctx, teamNo)
+	if err != nil {
+		return teamSnapshot{}, err
+	}
+	if plan.AreaID != areaID {
+		return snap, nil // plan (if any) targets a different area: defaults only
+	}
+	if plan.RallyLat != nil && plan.RallyLng != nil {
+		snap.rallyLat, snap.rallyLng = *plan.RallyLat, *plan.RallyLng
+	}
+	if len(plan.Checkpoints) > 0 {
+		b, err := json.Marshal(plan.Checkpoints)
+		if err != nil {
+			return teamSnapshot{}, err
+		}
+		cpStr := string(b)
+		snap.checkpointsJSON = &cpStr
+	}
+	return snap, nil
+}
 
 // GetActive returns the current active incident, or ErrNoActiveIncident.
 func (s *Store) GetActive(ctx context.Context) (*Incident, error) {
@@ -66,6 +112,15 @@ func (s *Store) Open(ctx context.Context, typeText, message string, teams []Team
 		overrideByMember[o.MemberID] = o
 	}
 
+	snapshots := make(map[int64]teamSnapshot, len(teams))
+	for _, t := range teams {
+		snap, err := s.resolveTeamSnapshot(ctx, t.No, t.AreaID)
+		if err != nil {
+			return nil, err
+		}
+		snapshots[t.No] = snap
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -88,9 +143,15 @@ func (s *Store) Open(ctx context.Context, typeText, message string, teams []Team
 	}
 
 	for _, t := range teams {
+		snap := snapshots[t.No]
+		var cpArg any
+		if snap.checkpointsJSON != nil {
+			cpArg = *snap.checkpointsJSON
+		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO team_task(incident_id, team_no, mission, area_id, version, updated_by, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)`,
-			incidentID, t.No, t.Mission, t.AreaID, actor, nowMs); err != nil {
+			`INSERT INTO team_task(incident_id, team_no, mission, area_id, version, updated_by, updated_at, rally_lat, rally_lng, checkpoints)
+			 VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
+			incidentID, t.No, t.Mission, t.AreaID, actor, nowMs, snap.rallyLat, snap.rallyLng, cpArg); err != nil {
 			return nil, err
 		}
 
@@ -182,37 +243,49 @@ func (s *Store) UpdateMeta(ctx context.Context, typeText, message *string, actor
 	return s.GetByID(ctx, inc.ID)
 }
 
-// GetTeamTask returns one team's task within an incident.
-func (s *Store) GetTeamTask(ctx context.Context, incidentID, teamNo int64) (*TeamTask, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT incident_id, team_no, mission, area_id, version, updated_by, updated_at FROM team_task WHERE incident_id=? AND team_no=?`,
-		incidentID, teamNo)
+const teamTaskCols = `incident_id, team_no, mission, area_id, version, updated_by, updated_at, rally_lat, rally_lng, checkpoints`
+
+func scanTeamTask(row interface{ Scan(...any) error }) (*TeamTask, error) {
 	var tt TeamTask
-	if err := row.Scan(&tt.IncidentID, &tt.TeamNo, &tt.Mission, &tt.AreaID, &tt.Version, &tt.UpdatedBy, &tt.UpdatedAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrTeamTaskNotFound
-		}
+	var rallyLat, rallyLng sql.NullFloat64
+	var cpJSON sql.NullString
+	if err := row.Scan(&tt.IncidentID, &tt.TeamNo, &tt.Mission, &tt.AreaID, &tt.Version, &tt.UpdatedBy, &tt.UpdatedAt,
+		&rallyLat, &rallyLng, &cpJSON); err != nil {
 		return nil, err
+	}
+	tt.RallyLat, tt.RallyLng = rallyLat.Float64, rallyLng.Float64
+	if cpJSON.Valid && cpJSON.String != "" {
+		if err := json.Unmarshal([]byte(cpJSON.String), &tt.Checkpoints); err != nil {
+			return nil, err
+		}
 	}
 	return &tt, nil
 }
 
+// GetTeamTask returns one team's task within an incident.
+func (s *Store) GetTeamTask(ctx context.Context, incidentID, teamNo int64) (*TeamTask, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT `+teamTaskCols+` FROM team_task WHERE incident_id=? AND team_no=?`, incidentID, teamNo)
+	tt, err := scanTeamTask(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrTeamTaskNotFound
+	}
+	return tt, err
+}
+
 // ListTeamTasks returns every team task for an incident.
 func (s *Store) ListTeamTasks(ctx context.Context, incidentID int64) ([]TeamTask, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT incident_id, team_no, mission, area_id, version, updated_by, updated_at FROM team_task WHERE incident_id=? ORDER BY team_no`,
-		incidentID)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+teamTaskCols+` FROM team_task WHERE incident_id=? ORDER BY team_no`, incidentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []TeamTask
 	for rows.Next() {
-		var tt TeamTask
-		if err := rows.Scan(&tt.IncidentID, &tt.TeamNo, &tt.Mission, &tt.AreaID, &tt.Version, &tt.UpdatedBy, &tt.UpdatedAt); err != nil {
+		tt, err := scanTeamTask(rows)
+		if err != nil {
 			return nil, err
 		}
-		out = append(out, tt)
+		out = append(out, *tt)
 	}
 	return out, rows.Err()
 }
@@ -224,6 +297,15 @@ func (s *Store) ListTeamTasks(ctx context.Context, incidentID int64) ([]TeamTask
 // bumped. Members with an area change revert ARRIVED/LEFT to MOVING
 // (SPEC §5.3 rule 3). Other teams' rows are never touched (R2).
 func (s *Store) UpdateTeamTask(ctx context.Context, incidentID, teamNo int64, mission string, areaID int64, actor string, now time.Time) error {
+	snap, err := s.resolveTeamSnapshot(ctx, teamNo, areaID)
+	if err != nil {
+		return err
+	}
+	var cpArg any
+	if snap.checkpointsJSON != nil {
+		cpArg = *snap.checkpointsJSON
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -231,8 +313,9 @@ func (s *Store) UpdateTeamTask(ctx context.Context, incidentID, teamNo int64, mi
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE team_task SET mission=?, area_id=?, version=version+1, updated_by=?, updated_at=? WHERE incident_id=? AND team_no=?`,
-		mission, areaID, actor, now.UnixMilli(), incidentID, teamNo); err != nil {
+		`UPDATE team_task SET mission=?, area_id=?, version=version+1, updated_by=?, updated_at=?, rally_lat=?, rally_lng=?, checkpoints=?
+		 WHERE incident_id=? AND team_no=?`,
+		mission, areaID, actor, now.UnixMilli(), snap.rallyLat, snap.rallyLng, cpArg, incidentID, teamNo); err != nil {
 		return err
 	}
 

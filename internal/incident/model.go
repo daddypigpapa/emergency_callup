@@ -54,13 +54,16 @@ type Incident struct {
 
 // TeamTask mirrors the `team_task` table.
 type TeamTask struct {
-	IncidentID int64
-	TeamNo     int64
-	Mission    string
-	AreaID     int64
-	Version    int
-	UpdatedBy  string
-	UpdatedAt  int64
+	IncidentID  int64
+	TeamNo      int64
+	Mission     string
+	AreaID      int64
+	Version     int
+	UpdatedBy   string
+	UpdatedAt   int64
+	RallyLat    float64 // snapshotted at open/update time, docs/SPEC_AREA_EDITOR.md §3.5
+	RallyLng    float64
+	Checkpoints []Checkpoint // nil if none
 }
 
 // Assignment mirrors the `assignment` table.
