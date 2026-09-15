@@ -581,7 +581,7 @@ function createLocationPicker(initial, onChange) {
 
   function render() {
     const fixed = current ? `확정: ${current.addr || '(주소 없음)'} (${current.lat.toFixed(5)}, ${current.lng.toFixed(5)})` : '';
-    setText(resultEl, armed ? `지도를 클릭할 때마다 위치가 옮겨집니다. 끝내려면 이 버튼을 다시 누르거나 주소칸을 클릭하세요.${fixed ? ' ' + fixed : ''}` : fixed);
+    setText(resultEl, armed ? `지도 클릭으로 위치 지정 중 · 주소칸을 클릭하면 종료${fixed ? ' · ' + fixed : ''}` : fixed);
   }
   render();
 
@@ -591,8 +591,8 @@ function createLocationPicker(initial, onChange) {
     render();
   }
 
-  pickBtn.addEventListener('click', () => {
-    if (armed) { disarmMapPicker(); return; }
+  function arm() {
+    if (armed) return;
     armed = true;
     pickBtn.classList.add('active');
     render();
@@ -601,6 +601,11 @@ function createLocationPicker(initial, onChange) {
       render();
       onChange(current, { live: true });
     }, disarmThis);
+  }
+
+  pickBtn.addEventListener('click', () => {
+    if (armed) disarmMapPicker();
+    else arm();
   });
   // Clicking into the address field is how the user says "I'm done clicking
   // the map" (the requested end condition); a lookup ends it too.
@@ -629,10 +634,11 @@ function createLocationPicker(initial, onChange) {
     onChange(current, { live: false });
   });
 
-  return el('div', { class: 'loc-picker' }, [
+  const root = el('div', { class: 'loc-picker' }, [
     el('div', { class: 'field-row' }, [queryInput, lookupBtn, pickBtn]),
     resultEl, confirmBtn,
   ]);
+  return { el: root, arm };
 }
 
 function renderTeamPlanForm(no, t) {
@@ -670,7 +676,7 @@ function renderTeamPlanForm(no, t) {
       if (!t.rally) t.rally = null; // stays null until the picker confirms a value
       rallyWidgetWrap.appendChild(createLocationPicker(t.rally, (val, { live }) => {
         t.rally = val; markPlanDirty(); focusTeamOnMap(no, !live);
-      }));
+      }).el);
     } else {
       t.rally = null;
       rallyWidgetWrap.appendChild(el('p', { class: 'hint' }, ['자동: 임무지역 중심']));
@@ -681,11 +687,13 @@ function renderTeamPlanForm(no, t) {
   refreshRallyWidget();
 
   const cpListWrap = el('div', {}, []);
+  let cpPickers = []; // one per checkpoint, in order, so addCpBtn can arm the newest
   function refreshCpList() {
     // Any armed "click the map" mode belongs to a picker about to be
     // destroyed (and possibly to a checkpoint that was just deleted) — end it.
     disarmMapPicker();
     clearChildren(cpListWrap);
+    cpPickers = [];
     t.checkpoints.forEach((cp, idx) => {
       const nameInput = el('input', { type: 'text', value: cp.name || '', placeholder: '이름' }, []);
       nameInput.addEventListener('input', () => { cp.name = nameInput.value; markPlanDirty(); });
@@ -709,12 +717,14 @@ function renderTeamPlanForm(no, t) {
         markPlanDirty(); refreshCpList(); focusTeamOnMap(no);
       });
 
+      const picker = createLocationPicker(cp.lat != null ? cp : null, (val, { live }) => {
+        cp.lat = val.lat; cp.lng = val.lng; cp.addr = val.addr;
+        markPlanDirty(); focusTeamOnMap(no, !live);
+      });
+      cpPickers.push(picker);
       cpListWrap.appendChild(el('div', { class: 'cp-item' }, [
         el('div', { class: 'field-row' }, [el('span', {}, [`${idx + 1}.`]), nameInput, rInput, upBtn, downBtn, delBtn]),
-        createLocationPicker(cp.lat != null ? cp : null, (val, { live }) => {
-          cp.lat = val.lat; cp.lng = val.lng; cp.addr = val.addr;
-          markPlanDirty(); focusTeamOnMap(no, !live);
-        }),
+        picker.el,
       ]));
     });
     clearAllCpBtn.hidden = t.checkpoints.length === 0;
@@ -722,9 +732,15 @@ function renderTeamPlanForm(no, t) {
   const addCpBtn = el('button', { class: 'action', type: 'button' }, ['체크포인트 추가']);
   addCpBtn.addEventListener('click', () => {
     if (t.checkpoints.length >= 10) { alert('체크포인트는 조당 최대 10개입니다.'); return; }
+    // If the previous checkpoint was being placed by map clicks (still in
+    // that mode, or was placed that way), the admin is clearly working
+    // through the route on the map — start the new one in the same mode.
+    const prev = t.checkpoints[t.checkpoints.length - 1];
+    const continueOnMap = !!plan.picker || (prev && prev.addr === '지도 지정');
     t.checkpoints.push({ name: `지점${t.checkpoints.length + 1}`, lat: null, lng: null, addr: '', r: 50 });
     markPlanDirty();
     refreshCpList();
+    if (continueOnMap) cpPickers[cpPickers.length - 1].arm();
   });
   const clearAllCpBtn = el('button', { class: 'action', type: 'button' }, ['체크포인트 모두 삭제']);
   clearAllCpBtn.addEventListener('click', () => {
