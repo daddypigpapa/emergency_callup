@@ -209,3 +209,10 @@ html, body {
 .roster-row { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--faint); font-size: 0.9em; align-items: center; }
 .roster-row .name { font-weight: 700; min-width: 4em; }
 .roster-row .state { margin-left: auto; font-size: 0.85em; color: var(--muted); }
+
+/* 집결지·체크포인트 마커 (docs/SPEC_AREA_EDITOR.md §7). */
+.rally-icon { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid var(--ink); }
+.cp-icon {
+  background: var(--paper); border: 2px solid var(--ink); width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--ink);
+}

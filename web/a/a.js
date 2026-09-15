@@ -1,6 +1,7 @@
 import { api, ApiError } from '/shared/api.js';
 import { syncServerTime, serverNow, startClock } from '/shared/clock.js';
 import { setText, clearChildren, el } from '/shared/text.js';
+import { mergeRuns, runToBounds } from '/shared/grid.js';
 
 const STATE_NAMES = ['미접속', '접속', '위치거부', '이동중', '응소', '이탈'];
 const STATE_KEYS = ['notified', 'logged_in', 'loc_denied', 'moving', 'arrived', 'left'];
@@ -73,19 +74,33 @@ els.loginForm.addEventListener('submit', async (e) => {
 });
 
 // ---------------------------------------------------------------- Map
-let map, layerGroup;
+let map, layerGroup, focusLayer;
 function initMap() {
   map = L.map(els.mapEl, { preferCanvas: true, zoomControl: true });
   L.tileLayer(board.cfg.tileUrl, { attribution: board.cfg.tileAttribution, maxZoom: 19 }).addTo(map);
   layerGroup = L.layerGroup().addTo(map);
+  focusLayer = L.layerGroup().addTo(map);
   map.setView([36.5, 127.8], 7);
 }
+
+function rallyIcon() { return L.divIcon({ className: 'rally-icon', iconSize: [14, 12] }); }
+function cpIcon(n) { return L.divIcon({ className: 'cp-icon', iconSize: [18, 18], html: String(n) }); }
 
 function areaLayerStyleFor() { return { color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.05 }; }
 
 function redrawAreas() {
   layerGroup.eachLayer((l) => { if (l._isAreaShape) layerGroup.removeLayer(l); });
   for (const a of board.areas) {
+    if (a.kind === 'grid' && a.cells && a.cells.length) {
+      const cells = a.cells.map(([i, j]) => ({ i, j }));
+      for (const run of mergeRuns(cells)) {
+        const b = runToBounds(a.size, run);
+        const rect = L.rectangle([[b[0], b[1]], [b[2], b[3]]], areaLayerStyleFor());
+        rect._isAreaShape = true;
+        rect.addTo(layerGroup);
+      }
+      continue;
+    }
     let shape;
     if (a.kind === 'circle') {
       shape = L.circle([a.lat, a.lng], Object.assign({ radius: a.r }, areaLayerStyleFor()));
@@ -232,10 +247,31 @@ function focusTeam(team) {
   board.focusTeam = board.focusTeam === team.no ? null : team.no;
   renderTeams();
   restyleAllMarkers();
+  focusLayer.clearLayers();
   if (!map || board.focusTeam == null) return;
+
   const points = [];
   const a = board.areas.find((a) => a.id === team.areaId);
   if (a) points.push([a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[3]]);
+
+  // The focused team's own rally point + checkpoints (docs/SPEC_AREA_EDITOR.md
+  // §7) — only this team's, to keep the map readable when several teams
+  // have their own. Cleared above whenever the focus changes or is dropped.
+  const boardTeam = board.teams.find((t) => t.no === team.no);
+  if (boardTeam && boardTeam.rally) {
+    const [rLat, rLng] = boardTeam.rally;
+    L.marker([rLat, rLng], { icon: rallyIcon(), interactive: false }).addTo(focusLayer);
+    points.push([rLat, rLng]);
+    const cpPts = (boardTeam.cps || []).map(([seq, lat, lng]) => {
+      L.marker([lat, lng], { icon: cpIcon(seq), interactive: false }).addTo(focusLayer);
+      points.push([lat, lng]);
+      return [lat, lng];
+    });
+    if (cpPts.length) {
+      L.polyline([[rLat, rLng], ...cpPts], { color: '#111', weight: 1, dashArray: '4,3', interactive: false }).addTo(focusLayer);
+    }
+  }
+
   for (const [id, p] of board.people) {
     if (p[3] !== team.no) continue;
     const row = board.m.get(id);

@@ -135,7 +135,7 @@ async function loadMe() {
   setText(els.areaName, me.task.area.name);
 
   updateRouteLinks(me.task.area);
-  ensureMap(me.task.area);
+  ensureMap(me.task.area, me.task.cps);
 
   maybeShowConsentSheet(me.incident.id, me.st);
   renderBoard();
@@ -161,13 +161,14 @@ function updateRouteLinks(area) {
 }
 
 let mapReady = false;
-function ensureMap(area) {
+function ensureMap(area, cps) {
   if (!mapReady) {
     fieldMap.init(els.mapEl, state.cfg.tileUrl, state.cfg.tileAttribution);
     fieldMap.onTileError(() => { els.mapFallback.hidden = false; });
     mapReady = true;
   }
   fieldMap.drawArea(area);
+  fieldMap.setCheckpoints(cps);
   // A new area (first load, or after a mission/area change confirmed via
   // the ack modal) always reframes back to the default "both" view. If we
   // already have a GPS reading by then (e.g. an area change mid-mission),
@@ -278,7 +279,7 @@ function showAckModal() {
     state.task.teamNameForBoard = me.member.teamName;
     setText(els.areaName, me.task.area.name);
     updateRouteLinks(me.task.area);
-    ensureMap(me.task.area);
+    ensureMap(me.task.area, me.task.cps);
     const ackToSend = me.task.mv;
     const ackRes = await api.post('/f/ack', { mv: ackToSend });
     state.ackVer = ackRes.mv;

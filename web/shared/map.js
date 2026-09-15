@@ -8,13 +8,19 @@
 // Depends on the global `L` from vendor/leaflet/leaflet.js (a plain
 // <script> tag, not an ES module — SPEC §2.1 "빌드 단계 없음").
 
+import { mergeRuns, runToBounds } from './grid.js';
+
 let map = null;
 let areaLayer = null;
 let meMarker = null;
 let meAccCircle = null;
 let navMarker = null;
+let cpLayer = null;
 let tileErrorCount = 0;
 let tileErrorCb = null;
+
+function rallyIcon() { return L.divIcon({ className: 'rally-icon', iconSize: [14, 12] }); }
+function cpIcon(n) { return L.divIcon({ className: 'cp-icon', iconSize: [18, 18], html: String(n) }); }
 
 export function init(container, tileUrl, tileAttribution) {
   // dragging/touchZoom explicit (they default to true, but this screen's
@@ -28,6 +34,7 @@ export function init(container, tileUrl, tileAttribution) {
   });
   layer.addTo(map);
   areaLayer = L.layerGroup().addTo(map);
+  cpLayer = L.layerGroup().addTo(map);
 
   // ensureMap() in f.js runs right after this screen is un-hidden, in the
   // same tick — the browser hasn't necessarily finished laying out the
@@ -67,6 +74,14 @@ export function drawArea(area) {
     L.circle([area.lat, area.lng], { radius: area.r, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06, interactive: false }).addTo(areaLayer);
   } else if (area.kind === 'polygon' && area.polygon) {
     L.polygon(area.polygon, { color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06, interactive: false }).addTo(areaLayer);
+  } else if (area.kind === 'grid' && area.cells && area.cells.length) {
+    // Merge adjacent cells into rectangles (docs/SPEC_AREA_EDITOR.md §6) so
+    // a large selection doesn't cost one shape per cell.
+    const cells = area.cells.map(([i, j]) => ({ i, j }));
+    for (const run of mergeRuns(cells)) {
+      const b = runToBounds(area.size, run);
+      L.rectangle([[b[0], b[1]], [b[2], b[3]]], { color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06, interactive: false }).addTo(areaLayer);
+    }
   }
   if (area.nav) {
     setNav(area.nav[0], area.nav[1]);
@@ -89,13 +104,27 @@ export function setMe(lat, lng, acc) {
   }
 }
 
+/** 집결지 (rally point) — a solid black triangle, interactive:false. */
 export function setNav(lat, lng) {
   if (!map) return;
   const latlng = [lat, lng];
   if (!navMarker) {
-    navMarker = L.marker(latlng, { interactive: false }).addTo(map);
+    navMarker = L.marker(latlng, { icon: rallyIcon(), interactive: false }).addTo(map);
   } else {
     navMarker.setLatLng(latlng);
+  }
+}
+
+/**
+ * Checkpoints (docs/SPEC_AREA_EDITOR.md §6): numbered □ markers, in order.
+ * cps = task.cps from GET /f/me, each [seq, name, lat, lng]. No checkpoints
+ * (undefined/empty) just clears whatever was drawn before.
+ */
+export function setCheckpoints(cps) {
+  if (!cpLayer) return;
+  cpLayer.clearLayers();
+  for (const [seq, , lat, lng] of cps || []) {
+    L.marker([lat, lng], { icon: cpIcon(seq), interactive: false }).addTo(cpLayer);
   }
 }
 
