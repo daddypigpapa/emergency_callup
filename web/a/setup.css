@@ -33,3 +33,12 @@ button.action:active { background: var(--ink); color: var(--paper); }
 .wide-input { min-width: 320px; flex: 1 1 320px; }
 .hint { color: var(--muted); font-size: 0.85rem; }
 a { color: var(--ink); }
+
+.area-editor { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.area-map-wrap { flex: 1 1 440px; min-width: 280px; }
+.area-map { height: 480px; border: 1px solid var(--line); }
+.area-side { flex: 1 1 320px; min-width: 280px; }
+.tool-btn.active { background: var(--ink); color: var(--paper); }
+#dongResults { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+.dong-item { padding: 5px 8px; border: 1px solid var(--line); cursor: pointer; font-size: 0.9rem; }
+.dong-item.selected { background: var(--ink); color: var(--paper); }

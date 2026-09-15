@@ -6,6 +6,7 @@
 <title>비상 인력동원 설정</title>
 <link rel="stylesheet" href="/a/a.css?v=1">
 <link rel="stylesheet" href="/a/setup.css?v=1">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css?v=1">
 </head>
 <body>
 <div class="setup-wrap">
@@ -35,14 +36,58 @@
 
   <section id="panel-areas" class="panel">
     <h2>임무지역</h2>
-    <div id="areaListWrap"></div>
-    <h3>새 지역 (원)</h3>
-    <div class="field-row">
-      <input id="areaName" placeholder="이름">
-      <input id="areaLat" placeholder="위도" type="number" step="0.00001">
-      <input id="areaLng" placeholder="경도" type="number" step="0.00001">
-      <input id="areaRadius" placeholder="반경(m)" type="number">
-      <button class="action" id="areaCreateBtn">등록</button>
+    <div class="area-editor">
+      <div class="area-map-wrap"><div id="areaMapEl" class="area-map"></div></div>
+      <div class="area-side">
+        <div id="areaListWrap"></div>
+
+        <h3 id="areaFormTitle">새 지역</h3>
+        <div class="field-row">
+          <input id="areaName" placeholder="이름">
+          <select id="areaKind">
+            <option value="grid">격자</option>
+            <option value="circle">원</option>
+          </select>
+        </div>
+
+        <div id="gridFields">
+          <div class="field-row">
+            <select id="gridSize">
+              <option value="100">100m 격자</option>
+              <option value="250" selected>250m 격자</option>
+              <option value="500">500m 격자</option>
+              <option value="1000">1000m 격자</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <button class="action tool-btn active" id="toolCellBtn" type="button">칸 선택</button>
+            <button class="action tool-btn" id="toolDragBtn" type="button">드래그 선택</button>
+            <button class="action tool-btn" id="toolDongBtn" type="button">행정동 선택</button>
+            <button class="action" id="gridClearBtn" type="button">모두 지우기</button>
+          </div>
+          <p id="gridCellCount" class="hint">선택된 칸: 0개</p>
+          <div id="dongSearch" class="field-row" hidden>
+            <input id="dongQuery" placeholder="행정동 이름 (예: 삼덕동)">
+            <button class="action" id="dongSearchBtn" type="button">검색</button>
+          </div>
+          <div id="dongResults"></div>
+        </div>
+
+        <div id="circleFields" hidden>
+          <div class="field-row">
+            <input id="areaLat" placeholder="위도" type="number" step="0.00001">
+            <input id="areaLng" placeholder="경도" type="number" step="0.00001">
+            <input id="areaRadius" placeholder="반경(m)" type="number">
+          </div>
+          <p class="hint">지도를 클릭하면 원의 중심이 그 위치로 이동합니다.</p>
+        </div>
+
+        <div class="field-row">
+          <button class="action" id="areaSaveBtn" type="button">저장</button>
+          <button class="action" id="areaCancelBtn" type="button" hidden>편집 취소</button>
+        </div>
+        <p id="areaFormStatus" class="hint"></p>
+      </div>
     </div>
   </section>
 
@@ -93,6 +138,7 @@
     <div id="eventsListWrap"></div>
   </section>
 </div>
+<script src="/vendor/leaflet/leaflet.js?v=1"></script>
 <script type="module" src="/a/setup.js?v=1"></script>
 </body>
 </html>
