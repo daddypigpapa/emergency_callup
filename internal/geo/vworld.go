@@ -67,15 +67,22 @@ const (
 )
 
 // SearchAdminDong looks up administrative-dong (읍/면/동) boundaries whose
-// name contains q. domain should be the registered BASE_URL host.
-func (c *Client) SearchAdminDong(ctx context.Context, key, domain, q string) ([]AdminDong, error) {
+// name contains q. referer is sent as the HTTP Referer header (use the
+// service's BASE_URL).
+//
+// Verified against the live API (2026-09): the Data API rejects requests
+// with INCORRECT_KEY unless a Referer header is present, and *also* rejects
+// them when the documented `domain` query parameter is included — so this
+// deliberately sends the header and omits the parameter. (The geocoder in
+// Geocode needs neither.)
+func (c *Client) SearchAdminDong(ctx context.Context, key, referer, q string) ([]AdminDong, error) {
 	filter := "emd_kor_nm:like:" + q
 	reqURL := fmt.Sprintf(
-		"%s/req/data?service=data&request=GetFeature&data=LT_C_ADEMD_INFO&key=%s&domain=%s&attrFilter=%s&geometry=true&crs=EPSG:4326&size=20&page=1&format=json",
-		c.baseURL, url.QueryEscape(key), url.QueryEscape(domain), url.QueryEscape(filter))
+		"%s/req/data?service=data&request=GetFeature&data=LT_C_ADEMD_INFO&key=%s&attrFilter=%s&geometry=true&crs=EPSG:4326&size=20&page=1&format=json",
+		c.baseURL, url.QueryEscape(key), url.QueryEscape(filter))
 
 	var raw vworldDataResponse
-	if err := c.getJSON(ctx, reqURL, &raw); err != nil {
+	if err := c.getJSON(ctx, reqURL, referer, &raw); err != nil {
 		return nil, err
 	}
 	if raw.Response.Status != "OK" {
@@ -275,7 +282,7 @@ func (c *Client) geocodeOnce(ctx context.Context, key, q, addrType string) (*Geo
 		c.baseURL, url.QueryEscape(q), addrType, url.QueryEscape(key))
 
 	var raw vworldGeocodeResponse
-	if err := c.getJSON(ctx, reqURL, &raw); err != nil {
+	if err := c.getJSON(ctx, reqURL, "", &raw); err != nil {
 		return nil, err
 	}
 	if raw.Response.Status != "OK" {
@@ -304,10 +311,13 @@ type vworldGeocodeResponse struct {
 	} `json:"response"`
 }
 
-func (c *Client) getJSON(ctx context.Context, rawURL string, out any) error {
+func (c *Client) getJSON(ctx context.Context, rawURL, referer string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return err
+	}
+	if referer != "" {
+		req.Header.Set("Referer", referer)
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

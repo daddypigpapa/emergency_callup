@@ -110,6 +110,7 @@ const editor = {
   gridLineLayer: null,  // faint grid lines over the visible viewport
   dongLayer: null,      // administrative-dong boundary outlines
   otherAreasLayer: null, // ghost bbox of every other area, for reference
+  circleLayer: null,    // live preview of the circle being edited
   size: 250,
   cells: new Map(),     // "i,j" -> {i,j}
   dongSelections: new Map(), // code -> Set of cell keys (for toggling a dong back off)
@@ -130,15 +131,36 @@ async function initAreaMap() {
   editor.gridLineLayer = L.layerGroup().addTo(editor.map);
   editor.dongLayer = L.layerGroup().addTo(editor.map);
   editor.otherAreasLayer = L.layerGroup().addTo(editor.map);
+  editor.circleLayer = L.layerGroup().addTo(editor.map);
   editor.map.on('moveend zoomend', redrawGridLines);
   editor.map.on('click', onAreaMapClick);
+  for (const id of ['areaLat', 'areaLng', 'areaRadius']) {
+    document.getElementById(id).addEventListener('input', redrawCirclePreview);
+  }
   setupDragSelect();
+}
+
+// Circle preview: whenever kind=circle and center+radius are filled in
+// (typed, clicked on the map, or loaded from an existing area), draw the
+// circle so the admin sees what they're about to save.
+function redrawCirclePreview() {
+  editor.circleLayer.clearLayers();
+  if (editor.kind !== 'circle') return;
+  const lat = Number(document.getElementById('areaLat').value);
+  const lng = Number(document.getElementById('areaLng').value);
+  const r = Number(document.getElementById('areaRadius').value);
+  if (!lat || !lng) return;
+  L.circleMarker([lat, lng], { radius: 4, color: '#111', fillColor: '#111', fillOpacity: 1, interactive: false }).addTo(editor.circleLayer);
+  if (r > 0) {
+    L.circle([lat, lng], { radius: r, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.18, interactive: false }).addTo(editor.circleLayer);
+  }
 }
 
 function onAreaMapClick(e) {
   if (editor.kind === 'circle') {
     document.getElementById('areaLat').value = e.latlng.lat.toFixed(5);
     document.getElementById('areaLng').value = e.latlng.lng.toFixed(5);
+    redrawCirclePreview();
     return;
   }
   if (editor.tool !== 'cell') return;
@@ -316,6 +338,7 @@ function toggleDong(dong, itemEl) {
       L.polyline([...ring, ring[0]], { color: '#111', weight: 2, dashArray: '4,3', interactive: false }).addTo(editor.dongLayer);
     }
     itemEl.classList.add('selected');
+    editor.map.fitBounds([[south, west], [north, east]], { padding: [20, 20] });
   }
   redrawSelectedCells();
 }
@@ -325,6 +348,7 @@ function onKindChange() {
   document.getElementById('gridFields').hidden = editor.kind !== 'grid';
   document.getElementById('circleFields').hidden = editor.kind !== 'circle';
   redrawGridLines();
+  redrawCirclePreview();
 }
 document.getElementById('areaKind').addEventListener('change', onKindChange);
 
@@ -372,7 +396,9 @@ function resetAreaForm() {
   editor.dongSelections.clear();
   editor.dongLayer.clearLayers();
   clearChildren(document.getElementById('dongResults'));
+  for (const id of ['areaLat', 'areaLng', 'areaRadius']) document.getElementById(id).value = '';
   redrawSelectedCells();
+  redrawCirclePreview();
   loadAreas();
 }
 document.getElementById('areaCancelBtn').addEventListener('click', resetAreaForm);
@@ -399,6 +425,7 @@ function loadAreaIntoForm(a) {
     document.getElementById('areaLat').value = a.lat;
     document.getElementById('areaLng').value = a.lng;
     document.getElementById('areaRadius').value = a.r;
+    redrawCirclePreview();
   }
   if (a.bbox) editor.map.fitBounds([[a.bbox[0], a.bbox[1]], [a.bbox[2], a.bbox[3]]], { padding: [20, 20] });
   loadAreas();
@@ -452,7 +479,7 @@ const plan = {
   areas: [],
   expanded: null,
   dirty: false,
-  mapClickHandler: null,
+  picker: null, // {handler, onDisarm} while a location picker is in "click the map" mode
 };
 
 async function initPlanMap() {
@@ -463,22 +490,37 @@ async function initPlanMap() {
   planLayer = L.layerGroup().addTo(planMap);
 }
 
-function armMapPicker(cb) {
-  if (plan.mapClickHandler) planMap.off('click', plan.mapClickHandler);
-  const handler = (e) => {
-    plan.mapClickHandler = null;
-    cb(e.latlng.lat, e.latlng.lng);
-  };
-  plan.mapClickHandler = handler;
-  planMap.once('click', handler);
+// "지도에서 클릭" mode stays on until explicitly ended: every map click
+// re-positions the same point, so the admin can nudge it repeatedly
+// without re-pressing the button. It ends when the picker's own address
+// field is focused/looked up, the button is pressed again, another picker
+// arms, or the form re-renders (disarmMapPicker is called from those).
+function armMapPicker(cb, onDisarm) {
+  disarmMapPicker();
+  const handler = (e) => cb(e.latlng.lat, e.latlng.lng);
+  plan.picker = { handler, onDisarm };
+  planMap.on('click', handler);
+  planMap.getContainer().classList.add('picking');
+}
+
+function disarmMapPicker() {
+  if (!plan.picker) return;
+  planMap.off('click', plan.picker.handler);
+  planMap.getContainer().classList.remove('picking');
+  const { onDisarm } = plan.picker;
+  plan.picker = null;
+  if (onDisarm) onDisarm();
 }
 
 function rallyIcon() { return L.divIcon({ className: 'rally-icon', iconSize: [14, 12] }); }
 function cpIcon(n) { return L.divIcon({ className: 'cp-icon', iconSize: [18, 18], html: String(n) }); }
 
 // Draws the expanded team's area + rally + checkpoints, and fits the map
-// to all of them (docs/SPEC_AREA_EDITOR.md §5.2 "지도에서").
-function focusTeamOnMap(no) {
+// to all of them (docs/SPEC_AREA_EDITOR.md §5.2 "지도에서"). fit=false
+// redraws without moving the view — used while the admin is clicking
+// around the map to place a point, where re-fitting on every click would
+// yank the map out from under them.
+function focusTeamOnMap(no, fit = true) {
   planLayer.clearLayers();
   const t = plan.teams.get(no);
   if (!t || !planMap) return;
@@ -517,17 +559,20 @@ function focusTeamOnMap(no) {
     L.polyline([[rallyPt.lat, rallyPt.lng], ...cpPts], { color: '#111', weight: 1, dashArray: '4,3', interactive: false }).addTo(planLayer);
   }
 
-  if (points.length) planMap.fitBounds(points, { padding: [30, 30], maxZoom: 17 });
+  if (fit && points.length) planMap.fitBounds(points, { padding: [30, 30], maxZoom: 17 });
 }
 
 function markPlanDirty() { plan.dirty = true; }
 
 // Shared widget for both the rally point and each checkpoint (SPEC_AREA_EDITOR.md
 // §5.3): road-name+basic-number lookup (confirmed explicitly, to avoid acting on
-// a typo) or a single map click, either way reported back via onChange.
+// a typo) or clicking the map, either way reported back via onChange(value,
+// {live}) — live=true means "still being positioned by map clicks", so the
+// caller should redraw without re-fitting the view.
 function createLocationPicker(initial, onChange) {
   let current = initial || null;
   let pending = null;
+  let armed = false;
   const queryInput = el('input', { placeholder: '도로명 + 기초번호 (예: 공평로 88)' }, []);
   const lookupBtn = el('button', { class: 'action', type: 'button' }, ['조회']);
   const pickBtn = el('button', { class: 'action', type: 'button' }, ['지도에서 클릭']);
@@ -535,11 +580,34 @@ function createLocationPicker(initial, onChange) {
   const confirmBtn = el('button', { class: 'action', type: 'button', hidden: true }, ['이 위치로']);
 
   function render() {
-    setText(resultEl, current ? `확정: ${current.addr || '(주소 없음)'} (${current.lat.toFixed(5)}, ${current.lng.toFixed(5)})` : '');
+    const fixed = current ? `확정: ${current.addr || '(주소 없음)'} (${current.lat.toFixed(5)}, ${current.lng.toFixed(5)})` : '';
+    setText(resultEl, armed ? `지도를 클릭할 때마다 위치가 옮겨집니다. 끝내려면 이 버튼을 다시 누르거나 주소칸을 클릭하세요.${fixed ? ' ' + fixed : ''}` : fixed);
   }
   render();
 
+  function disarmThis() {
+    armed = false;
+    pickBtn.classList.remove('active');
+    render();
+  }
+
+  pickBtn.addEventListener('click', () => {
+    if (armed) { disarmMapPicker(); return; }
+    armed = true;
+    pickBtn.classList.add('active');
+    render();
+    armMapPicker((lat, lng) => {
+      current = { lat, lng, addr: '지도 지정' };
+      render();
+      onChange(current, { live: true });
+    }, disarmThis);
+  });
+  // Clicking into the address field is how the user says "I'm done clicking
+  // the map" (the requested end condition); a lookup ends it too.
+  queryInput.addEventListener('focus', () => { if (armed) disarmMapPicker(); });
+
   lookupBtn.addEventListener('click', async () => {
+    if (armed) disarmMapPicker();
     const q = queryInput.value.trim();
     if (!q) return;
     try {
@@ -558,15 +626,7 @@ function createLocationPicker(initial, onChange) {
     pending = null;
     confirmBtn.hidden = true;
     render();
-    onChange(current);
-  });
-  pickBtn.addEventListener('click', () => {
-    setText(resultEl, '지도를 클릭하세요...');
-    armMapPicker((lat, lng) => {
-      current = { lat, lng, addr: '지도 지정' };
-      render();
-      onChange(current);
-    });
+    onChange(current, { live: false });
   });
 
   return el('div', { class: 'loc-picker' }, [
@@ -604,11 +664,12 @@ function renderTeamPlanForm(no, t) {
   manualRadio.checked = t.rally != null;
   const rallyWidgetWrap = el('div', {}, []);
   function refreshRallyWidget() {
+    disarmMapPicker();
     clearChildren(rallyWidgetWrap);
     if (manualRadio.checked) {
       if (!t.rally) t.rally = null; // stays null until the picker confirms a value
-      rallyWidgetWrap.appendChild(createLocationPicker(t.rally, (val) => {
-        t.rally = val; markPlanDirty(); focusTeamOnMap(no);
+      rallyWidgetWrap.appendChild(createLocationPicker(t.rally, (val, { live }) => {
+        t.rally = val; markPlanDirty(); focusTeamOnMap(no, !live);
       }));
     } else {
       t.rally = null;
@@ -621,6 +682,9 @@ function renderTeamPlanForm(no, t) {
 
   const cpListWrap = el('div', {}, []);
   function refreshCpList() {
+    // Any armed "click the map" mode belongs to a picker about to be
+    // destroyed (and possibly to a checkpoint that was just deleted) — end it.
+    disarmMapPicker();
     clearChildren(cpListWrap);
     t.checkpoints.forEach((cp, idx) => {
       const nameInput = el('input', { type: 'text', value: cp.name || '', placeholder: '이름' }, []);
@@ -647,14 +711,14 @@ function renderTeamPlanForm(no, t) {
 
       cpListWrap.appendChild(el('div', { class: 'cp-item' }, [
         el('div', { class: 'field-row' }, [el('span', {}, [`${idx + 1}.`]), nameInput, rInput, upBtn, downBtn, delBtn]),
-        createLocationPicker(cp.lat != null ? cp : null, (val) => {
+        createLocationPicker(cp.lat != null ? cp : null, (val, { live }) => {
           cp.lat = val.lat; cp.lng = val.lng; cp.addr = val.addr;
-          markPlanDirty(); focusTeamOnMap(no);
+          markPlanDirty(); focusTeamOnMap(no, !live);
         }),
       ]));
     });
+    clearAllCpBtn.hidden = t.checkpoints.length === 0;
   }
-  refreshCpList();
   const addCpBtn = el('button', { class: 'action', type: 'button' }, ['체크포인트 추가']);
   addCpBtn.addEventListener('click', () => {
     if (t.checkpoints.length >= 10) { alert('체크포인트는 조당 최대 10개입니다.'); return; }
@@ -662,6 +726,16 @@ function renderTeamPlanForm(no, t) {
     markPlanDirty();
     refreshCpList();
   });
+  const clearAllCpBtn = el('button', { class: 'action', type: 'button' }, ['체크포인트 모두 삭제']);
+  clearAllCpBtn.addEventListener('click', () => {
+    if (!t.checkpoints.length) return;
+    if (!confirm(`${no}조의 체크포인트 ${t.checkpoints.length}개를 모두 삭제할까요?`)) return;
+    t.checkpoints.length = 0;
+    markPlanDirty();
+    refreshCpList();
+    focusTeamOnMap(no);
+  });
+  refreshCpList();
 
   return el('div', { class: 'plan-form' }, [
     el('label', {}, ['임무']), missionInput,
@@ -672,11 +746,13 @@ function renderTeamPlanForm(no, t) {
     ]),
     rallyWidgetWrap,
     el('label', {}, ['체크포인트 (최대 10개)']),
-    cpListWrap, addCpBtn,
+    cpListWrap,
+    el('div', { class: 'field-row' }, [addCpBtn, clearAllCpBtn]),
   ]);
 }
 
 function renderTeamPlanList() {
+  disarmMapPicker();
   const wrap = document.getElementById('teamPlanList');
   clearChildren(wrap);
   for (const [no, t] of plan.teams) {

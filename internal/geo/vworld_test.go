@@ -88,12 +88,20 @@ func TestSearchAdminDong_SimplifiesAndCaps(t *testing.T) {
 		`]}}}}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The live API rejects requests without a Referer, and rejects them
+		// with a `domain` query param — pin both behaviors.
+		if r.Header.Get("Referer") != "http://localhost:8080/" {
+			t.Errorf("Referer = %q, want http://localhost:8080/", r.Header.Get("Referer"))
+		}
+		if r.URL.Query().Has("domain") {
+			t.Error("request must not carry a domain= query param")
+		}
 		w.Write([]byte(body))
 	}))
 	defer srv.Close()
 
 	c := NewClient(srv.URL)
-	dongs, err := c.SearchAdminDong(context.Background(), "key", "localhost", "삼덕동")
+	dongs, err := c.SearchAdminDong(context.Background(), "key", "http://localhost:8080/", "삼덕동")
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}

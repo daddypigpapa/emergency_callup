@@ -3,7 +3,6 @@ package httpapi
 import (
 	"errors"
 	"net/http"
-	"net/url"
 	"time"
 
 	"emergencycallup/internal/geo"
@@ -15,14 +14,6 @@ type geoCacheEntry struct {
 }
 
 const geoCacheTTL = 10 * time.Minute
-
-func (s *Server) baseURLHost() string {
-	u, err := url.Parse(s.Cfg.BaseURL)
-	if err != nil || u.Host == "" {
-		return "localhost"
-	}
-	return u.Host
-}
 
 // handleGeoAdmin implements GET /a/geo/admin?q=<동 이름>
 // (docs/SPEC_AREA_EDITOR.md §4.2): proxies VWorld's administrative-dong
@@ -44,7 +35,7 @@ func (s *Server) handleGeoAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := s.effectiveTileKey(r.Context())
-	dongs, err := s.Geo.SearchAdminDong(r.Context(), key, s.baseURLHost(), q)
+	dongs, err := s.Geo.SearchAdminDong(r.Context(), key, s.Cfg.BaseURL+"/", q)
 	if err != nil {
 		writeError(w, now, "upstream", "행정동 정보를 가져오지 못했습니다. VWorld 키에 데이터 API 권한이 있는지 확인하세요.")
 		return
