@@ -110,23 +110,66 @@ func (db *DB) migrate() error {
 		if err != nil {
 			return err
 		}
-		tx, err := db.Begin()
-		if err != nil {
+		// A migration that starts with "-- +fk_off" rebuilds a table (SQLite
+		// has no ALTER for changing a CHECK constraint), which requires
+		// foreign_keys off for the duration: with it on, dropping a table
+		// that other tables reference fails immediately, even inside a
+		// transaction. foreign_keys can't be toggled mid-transaction either
+		// (same restriction as journal_mode), so it's flipped here via a
+		// bare db.Exec before/after the tx — safe only because
+		// SetMaxOpenConns(1) guarantees that's the same physical connection
+		// the transaction below checks out.
+		fkOff := strings.HasPrefix(string(sqlBytes), "-- +fk_off")
+		if fkOff {
+			if _, err := db.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+				return fmt.Errorf("disabling foreign_keys for %s: %w", name, err)
+			}
+		}
+		if err := db.applyMigration(name, version, sqlBytes, fkOff); err != nil {
+			if fkOff {
+				db.Exec(`PRAGMA foreign_keys = ON`)
+			}
 			return err
 		}
-		if _, err := tx.Exec(string(sqlBytes)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("applying %s: %w", name, err)
-		}
-		if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, strftime('%s','now')*1000)`, version); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
+		if fkOff {
+			if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+				return fmt.Errorf("re-enabling foreign_keys after %s: %w", name, err)
+			}
 		}
 	}
 	return nil
+}
+
+func (db *DB) applyMigration(name string, version int, sqlBytes []byte, fkOff bool) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(string(sqlBytes)); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("applying %s: %w", name, err)
+	}
+	if fkOff {
+		// Table rebuilds must not silently break a foreign-key reference
+		// (e.g. member.area_id pointing at a row that didn't survive the
+		// rebuild) — verify before committing, not after.
+		rows, err := tx.Query(`PRAGMA foreign_key_check`)
+		if err != nil {
+			tx.Rollback()
+			return fmt.Errorf("foreign_key_check after %s: %w", name, err)
+		}
+		violated := rows.Next()
+		rows.Close()
+		if violated {
+			tx.Rollback()
+			return fmt.Errorf("applying %s: foreign_key_check found violations after rebuild", name)
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES (?, strftime('%s','now')*1000)`, version); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 // versionOf extracts the leading integer from a migration filename like

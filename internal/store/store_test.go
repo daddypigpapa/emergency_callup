@@ -51,7 +51,8 @@ func TestOpen_SchemaHasCoreTables(t *testing.T) {
 	defer db.Close()
 
 	tables := []string{"team", "area", "member", "preset", "incident", "team_task",
-		"assignment", "fix", "event", "admin_user", "session", "sms_log"}
+		"assignment", "fix", "event", "admin_user", "session", "sms_log",
+		"team_plan", "checkpoint"}
 	for _, tbl := range tables {
 		var n int
 		err := db.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name=?`, tbl).Scan(&n)
