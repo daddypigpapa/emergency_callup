@@ -43,10 +43,14 @@ func statusForCode(code string) int {
 		return http.StatusBadRequest
 	case "conflict", "resync", "closed":
 		return http.StatusConflict
+	case "not_found":
+		return http.StatusNotFound
 	case "rate":
 		return http.StatusTooManyRequests
 	case "busy":
 		return http.StatusServiceUnavailable
+	case "upstream":
+		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError
 	}

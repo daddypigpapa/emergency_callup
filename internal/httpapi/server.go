@@ -7,11 +7,13 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"emergencycallup/internal/area"
 	"emergencycallup/internal/auth"
 	"emergencycallup/internal/config"
+	"emergencycallup/internal/geo"
 	"emergencycallup/internal/incident"
 	"emergencycallup/internal/roster"
 	"emergencycallup/internal/settings"
@@ -40,6 +42,13 @@ type Server struct {
 	Tracker   *tracker.Tracker
 	SMS       *sms.Service
 	Settings  *settings.Store
+	Plans     *incident.PlanStore
+	Geo       *geo.Client
+
+	// geoCache holds GET /a/geo/admin results for 10 minutes
+	// (docs/SPEC_AREA_EDITOR.md §4.2) — best-effort, not persisted.
+	geoCacheMu sync.Mutex
+	geoCache   map[string]geoCacheEntry
 
 	// Now is injected so tests can control the clock. Defaults to time.Now.
 	Now func() time.Time
@@ -90,6 +99,9 @@ func NewServer(cfg *config.Config, db *store.DB) *Server {
 		Tracker:   tracker.New(db.DB, incidents, areas, auditLog),
 		SMS:       sms.NewService(db.DB, httpProvider, auditLog),
 		Settings:  settings.NewStore(db.DB),
+		Plans:     incident.NewPlanStore(db.DB),
+		Geo:       geo.NewClient(""),
+		geoCache:  map[string]geoCacheEntry{},
 		Now:       time.Now,
 		startedAt: time.Now(),
 	}
@@ -148,6 +160,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/a/areas/{id}", s.requireAdminSession(auth.RoleAdmin, s.handleAreaDelete))
 	mux.HandleFunc("POST /api/v1/a/areas/{id}/copy", s.requireAdminSession(auth.RoleAdmin, s.handleAreaCopy))
 	mux.HandleFunc("GET /api/v1/a/geo/cell", s.requireAdminSession(auth.RoleAdmin, s.handleGeoCell))
+	mux.HandleFunc("GET /api/v1/a/geo/admin", s.requireAdminSession(auth.RoleAdmin, s.handleGeoAdmin))
+	mux.HandleFunc("GET /api/v1/a/geo/geocode", s.requireAdminSession(auth.RoleAdmin, s.handleGeoGeocode))
 	mux.HandleFunc("GET /api/v1/a/presets", s.requireAdminSession(auth.RoleAdmin, s.handlePresetsList))
 	mux.HandleFunc("POST /api/v1/a/presets", s.requireAdminSession(auth.RoleAdmin, s.handlePresetCreate))
 	mux.HandleFunc("PUT /api/v1/a/presets/{id}", s.requireAdminSession(auth.RoleAdmin, s.handlePresetUpdate))
