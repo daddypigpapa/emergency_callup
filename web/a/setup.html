@@ -17,6 +17,7 @@
   <div class="setup-tabs">
     <button class="tab active" data-panel="members">명단</button>
     <button class="tab" data-panel="areas">임무지역</button>
+    <button class="tab" data-panel="teamplan">조별계획</button>
     <button class="tab" data-panel="presets">프리셋</button>
     <button class="tab" data-panel="map">지도</button>
     <button class="tab" data-panel="admins">관리자 계정</button>
@@ -89,6 +90,22 @@
         <p id="areaFormStatus" class="hint"></p>
       </div>
     </div>
+  </section>
+
+  <section id="panel-teamplan" class="panel">
+    <h2>조별 계획</h2>
+    <p class="hint">평시에 조별 임무·임무지역·집결지·체크포인트를 미리 정해 두면, 발령 시 자동으로 채워집니다.</p>
+    <div class="area-editor">
+      <div class="area-map-wrap"><div id="planMapEl" class="area-map"></div></div>
+      <div class="area-side">
+        <div id="teamPlanList"></div>
+        <div class="field-row">
+          <button class="action" id="teamPlanSaveAllBtn" type="button">전체 저장</button>
+        </div>
+        <div id="teamPlanStatus"></div>
+      </div>
+    </div>
+    <datalist id="missionPresetList"></datalist>
   </section>
 
   <section id="panel-presets" class="panel">

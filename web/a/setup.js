@@ -15,6 +15,9 @@ document.querySelectorAll('.setup-tabs .tab').forEach((btn) => {
     if (btn.dataset.panel === 'areas' && editor.map) {
       setTimeout(() => { editor.map.invalidateSize(); redrawGridLines(); }, 0);
     }
+    if (btn.dataset.panel === 'teamplan' && planMap) {
+      setTimeout(() => { planMap.invalidateSize(); }, 0);
+    }
   });
 });
 
@@ -441,6 +444,310 @@ document.getElementById('areaSaveBtn').addEventListener('click', async () => {
   }
 });
 
+// ---- Team plans (docs/SPEC_AREA_EDITOR.md §5.2, §5.3) ----
+let planMap = null;
+let planLayer = null;
+const plan = {
+  teams: new Map(), // no -> {mission, areaId, rally:{lat,lng,addr}|null, checkpoints:[{name,lat,lng,addr,r}]}
+  areas: [],
+  expanded: null,
+  dirty: false,
+  mapClickHandler: null,
+};
+
+async function initPlanMap() {
+  const cfg = await fetch('/api/v1/config').then((r) => r.json());
+  planMap = L.map('planMapEl', { zoomControl: true });
+  L.tileLayer(cfg.tileUrl, { attribution: cfg.tileAttribution, maxZoom: 19 }).addTo(planMap);
+  planMap.setView([36.5, 127.8], 7);
+  planLayer = L.layerGroup().addTo(planMap);
+}
+
+function armMapPicker(cb) {
+  if (plan.mapClickHandler) planMap.off('click', plan.mapClickHandler);
+  const handler = (e) => {
+    plan.mapClickHandler = null;
+    cb(e.latlng.lat, e.latlng.lng);
+  };
+  plan.mapClickHandler = handler;
+  planMap.once('click', handler);
+}
+
+function rallyIcon() { return L.divIcon({ className: 'rally-icon', iconSize: [14, 12] }); }
+function cpIcon(n) { return L.divIcon({ className: 'cp-icon', iconSize: [18, 18], html: String(n) }); }
+
+// Draws the expanded team's area + rally + checkpoints, and fits the map
+// to all of them (docs/SPEC_AREA_EDITOR.md §5.2 "지도에서").
+function focusTeamOnMap(no) {
+  planLayer.clearLayers();
+  const t = plan.teams.get(no);
+  if (!t || !planMap) return;
+  const points = [];
+  const area = plan.areas.find((a) => a.id === t.areaId);
+  if (area) {
+    if (area.kind === 'circle') {
+      L.circle([area.lat, area.lng], { radius: area.r, color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06, interactive: false }).addTo(planLayer);
+    } else if (area.kind === 'grid' && area.cells && area.cells.length) {
+      const cells = area.cells.map(([i, j]) => ({ i, j }));
+      for (const run of mergeRuns(cells)) {
+        const b = runToBounds(area.size, run);
+        L.rectangle([[b[0], b[1]], [b[2], b[3]]], { color: '#111', weight: 1, fillColor: '#111', fillOpacity: 0.08, interactive: false }).addTo(planLayer);
+      }
+    } else if (area.kind === 'polygon' && area.polygon) {
+      L.polygon(area.polygon, { color: '#111', weight: 2, fillColor: '#111', fillOpacity: 0.06, interactive: false }).addTo(planLayer);
+    }
+    if (area.bbox) points.push([area.bbox[0], area.bbox[1]], [area.bbox[2], area.bbox[3]]);
+  }
+
+  let rallyPt = t.rally;
+  if (!rallyPt && area && area.nav) rallyPt = { lat: area.nav[0], lng: area.nav[1] };
+  if (rallyPt) {
+    L.marker([rallyPt.lat, rallyPt.lng], { icon: rallyIcon(), interactive: false }).addTo(planLayer);
+    points.push([rallyPt.lat, rallyPt.lng]);
+  }
+
+  const cpPts = [];
+  t.checkpoints.forEach((cp, idx) => {
+    if (cp.lat == null) return;
+    L.marker([cp.lat, cp.lng], { icon: cpIcon(idx + 1), interactive: false }).addTo(planLayer);
+    points.push([cp.lat, cp.lng]);
+    cpPts.push([cp.lat, cp.lng]);
+  });
+  if (rallyPt && cpPts.length) {
+    L.polyline([[rallyPt.lat, rallyPt.lng], ...cpPts], { color: '#111', weight: 1, dashArray: '4,3', interactive: false }).addTo(planLayer);
+  }
+
+  if (points.length) planMap.fitBounds(points, { padding: [30, 30], maxZoom: 17 });
+}
+
+function markPlanDirty() { plan.dirty = true; }
+
+// Shared widget for both the rally point and each checkpoint (SPEC_AREA_EDITOR.md
+// §5.3): road-name+basic-number lookup (confirmed explicitly, to avoid acting on
+// a typo) or a single map click, either way reported back via onChange.
+function createLocationPicker(initial, onChange) {
+  let current = initial || null;
+  let pending = null;
+  const queryInput = el('input', { placeholder: '도로명 + 기초번호 (예: 공평로 88)' }, []);
+  const lookupBtn = el('button', { class: 'action', type: 'button' }, ['조회']);
+  const pickBtn = el('button', { class: 'action', type: 'button' }, ['지도에서 클릭']);
+  const resultEl = el('p', { class: 'hint' }, []);
+  const confirmBtn = el('button', { class: 'action', type: 'button', hidden: true }, ['이 위치로']);
+
+  function render() {
+    setText(resultEl, current ? `확정: ${current.addr || '(주소 없음)'} (${current.lat.toFixed(5)}, ${current.lng.toFixed(5)})` : '');
+  }
+  render();
+
+  lookupBtn.addEventListener('click', async () => {
+    const q = queryInput.value.trim();
+    if (!q) return;
+    try {
+      const res = await api.get(`/a/geo/geocode?q=${encodeURIComponent(q)}`);
+      pending = { lat: res.lat, lng: res.lng, addr: res.matched };
+      setText(resultEl, `조회 결과: ${res.matched} (${res.lat.toFixed(5)}, ${res.lng.toFixed(5)})`);
+      confirmBtn.hidden = false;
+    } catch (err) {
+      setText(resultEl, err.message || '조회 실패');
+      confirmBtn.hidden = true;
+    }
+  });
+  confirmBtn.addEventListener('click', () => {
+    if (!pending) return;
+    current = pending;
+    pending = null;
+    confirmBtn.hidden = true;
+    render();
+    onChange(current);
+  });
+  pickBtn.addEventListener('click', () => {
+    setText(resultEl, '지도를 클릭하세요...');
+    armMapPicker((lat, lng) => {
+      current = { lat, lng, addr: '지도 지정' };
+      render();
+      onChange(current);
+    });
+  });
+
+  return el('div', { class: 'loc-picker' }, [
+    el('div', { class: 'field-row' }, [queryInput, lookupBtn, pickBtn]),
+    resultEl, confirmBtn,
+  ]);
+}
+
+function renderTeamPlanForm(no, t) {
+  const missionInput = el('input', { type: 'text', value: t.mission || '', placeholder: '임무', list: 'missionPresetList' }, []);
+  missionInput.addEventListener('input', () => { t.mission = missionInput.value; markPlanDirty(); });
+
+  const areaSelect = el('select', {}, [
+    el('option', { value: '' }, ['(없음)']),
+    ...plan.areas.map((a) => {
+      const opt = el('option', { value: a.id }, [a.name]);
+      if (a.id === t.areaId) opt.selected = true;
+      return opt;
+    }),
+  ]);
+  areaSelect.addEventListener('change', () => {
+    t.areaId = Number(areaSelect.value) || 0;
+    markPlanDirty();
+    focusTeamOnMap(no);
+  });
+
+  const rallyGroupName = `rally-${no}`;
+  // Not passed via el()'s attrs: setAttribute('checked', false) still marks a
+  // radio checked (HTML boolean attributes are presence-only), so this has
+  // to be a property assignment after creation, matching how <option
+  // selected> is handled elsewhere in this file.
+  const autoRadio = el('input', { type: 'radio', name: rallyGroupName }, []);
+  const manualRadio = el('input', { type: 'radio', name: rallyGroupName }, []);
+  autoRadio.checked = t.rally == null;
+  manualRadio.checked = t.rally != null;
+  const rallyWidgetWrap = el('div', {}, []);
+  function refreshRallyWidget() {
+    clearChildren(rallyWidgetWrap);
+    if (manualRadio.checked) {
+      if (!t.rally) t.rally = null; // stays null until the picker confirms a value
+      rallyWidgetWrap.appendChild(createLocationPicker(t.rally, (val) => {
+        t.rally = val; markPlanDirty(); focusTeamOnMap(no);
+      }));
+    } else {
+      t.rally = null;
+      rallyWidgetWrap.appendChild(el('p', { class: 'hint' }, ['자동: 임무지역 중심']));
+    }
+  }
+  autoRadio.addEventListener('change', () => { markPlanDirty(); refreshRallyWidget(); focusTeamOnMap(no); });
+  manualRadio.addEventListener('change', () => { markPlanDirty(); refreshRallyWidget(); });
+  refreshRallyWidget();
+
+  const cpListWrap = el('div', {}, []);
+  function refreshCpList() {
+    clearChildren(cpListWrap);
+    t.checkpoints.forEach((cp, idx) => {
+      const nameInput = el('input', { type: 'text', value: cp.name || '', placeholder: '이름' }, []);
+      nameInput.addEventListener('input', () => { cp.name = nameInput.value; markPlanDirty(); });
+      const rInput = el('input', { type: 'number', value: String(cp.r || 50), placeholder: '반경(m)' }, []);
+      rInput.addEventListener('input', () => { cp.r = Number(rInput.value) || 50; markPlanDirty(); });
+      const upBtn = el('button', { class: 'action', type: 'button' }, ['↑']);
+      upBtn.disabled = idx === 0;
+      upBtn.addEventListener('click', () => {
+        [t.checkpoints[idx - 1], t.checkpoints[idx]] = [t.checkpoints[idx], t.checkpoints[idx - 1]];
+        markPlanDirty(); refreshCpList(); focusTeamOnMap(no);
+      });
+      const downBtn = el('button', { class: 'action', type: 'button' }, ['↓']);
+      downBtn.disabled = idx === t.checkpoints.length - 1;
+      downBtn.addEventListener('click', () => {
+        [t.checkpoints[idx + 1], t.checkpoints[idx]] = [t.checkpoints[idx], t.checkpoints[idx + 1]];
+        markPlanDirty(); refreshCpList(); focusTeamOnMap(no);
+      });
+      const delBtn = el('button', { class: 'action', type: 'button' }, ['삭제']);
+      delBtn.addEventListener('click', () => {
+        t.checkpoints.splice(idx, 1);
+        markPlanDirty(); refreshCpList(); focusTeamOnMap(no);
+      });
+
+      cpListWrap.appendChild(el('div', { class: 'cp-item' }, [
+        el('div', { class: 'field-row' }, [el('span', {}, [`${idx + 1}.`]), nameInput, rInput, upBtn, downBtn, delBtn]),
+        createLocationPicker(cp.lat != null ? cp : null, (val) => {
+          cp.lat = val.lat; cp.lng = val.lng; cp.addr = val.addr;
+          markPlanDirty(); focusTeamOnMap(no);
+        }),
+      ]));
+    });
+  }
+  refreshCpList();
+  const addCpBtn = el('button', { class: 'action', type: 'button' }, ['체크포인트 추가']);
+  addCpBtn.addEventListener('click', () => {
+    if (t.checkpoints.length >= 10) { alert('체크포인트는 조당 최대 10개입니다.'); return; }
+    t.checkpoints.push({ name: `지점${t.checkpoints.length + 1}`, lat: null, lng: null, addr: '', r: 50 });
+    markPlanDirty();
+    refreshCpList();
+  });
+
+  return el('div', { class: 'plan-form' }, [
+    el('label', {}, ['임무']), missionInput,
+    el('label', {}, ['임무지역']), areaSelect,
+    el('label', {}, ['집결지']),
+    el('div', { class: 'field-row' }, [
+      autoRadio, el('span', {}, ['자동(임무지역 중심)']), manualRadio, el('span', {}, ['직접 지정']),
+    ]),
+    rallyWidgetWrap,
+    el('label', {}, ['체크포인트 (최대 10개)']),
+    cpListWrap, addCpBtn,
+  ]);
+}
+
+function renderTeamPlanList() {
+  const wrap = document.getElementById('teamPlanList');
+  clearChildren(wrap);
+  for (const [no, t] of plan.teams) {
+    const isOpen = plan.expanded === no;
+    const header = el('div', { class: 'plan-row-header' + (isOpen ? ' open' : '') }, [`${no}조 · ${t.mission || '(미부여)'}`]);
+    header.addEventListener('click', () => {
+      plan.expanded = isOpen ? null : no;
+      renderTeamPlanList();
+      if (!isOpen) focusTeamOnMap(no);
+    });
+    const row = el('div', { class: 'plan-row' }, [header]);
+    if (isOpen) row.appendChild(renderTeamPlanForm(no, t));
+    wrap.appendChild(row);
+  }
+}
+
+async function loadTeamPlans() {
+  try {
+    const [plansRes, areasRes, missionPresets] = await Promise.all([
+      api.get('/a/team-plans'), api.get('/a/areas'), api.get('/a/presets?kind=mission'),
+    ]);
+    plan.areas = areasRes.areas;
+    plan.teams.clear();
+    for (const t of plansRes.teams) {
+      plan.teams.set(t.no, {
+        mission: t.mission || '',
+        areaId: t.areaId || 0,
+        rally: t.rally && t.rally.auto === false ? { lat: t.rally.lat, lng: t.rally.lng, addr: t.rally.addr || '' } : null,
+        checkpoints: (t.checkpoints || []).map((cp) => ({ name: cp.name, lat: cp.lat, lng: cp.lng, addr: cp.addr || '', r: cp.r })),
+      });
+    }
+    plan.dirty = false;
+    renderTeamPlanList();
+
+    const datalist = document.getElementById('missionPresetList');
+    clearChildren(datalist);
+    for (const p of missionPresets.presets) datalist.appendChild(el('option', { value: p.text }, []));
+  } catch (err) {
+    if (!guardAuth(err)) throw err;
+  }
+}
+
+document.getElementById('teamPlanSaveAllBtn').addEventListener('click', async () => {
+  const teams = [...plan.teams.entries()].map(([no, t]) => ({
+    no,
+    mission: t.mission || '',
+    areaId: t.areaId || 0,
+    rally: t.rally ? { lat: t.rally.lat, lng: t.rally.lng, addr: t.rally.addr || '' } : null,
+    checkpoints: t.checkpoints
+      .filter((cp) => cp.lat != null)
+      .map((cp) => ({ name: cp.name, lat: cp.lat, lng: cp.lng, addr: cp.addr || '', r: cp.r || 50 })),
+  }));
+  const statusEl = document.getElementById('teamPlanStatus');
+  clearChildren(statusEl);
+  try {
+    const res = await api.put('/a/team-plans', { teams });
+    plan.dirty = false;
+    const time = new Date(res.t).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' });
+    statusEl.appendChild(el('p', {}, [`저장됨 ${time}`]));
+    for (const w of res.warnings || []) statusEl.appendChild(el('p', { class: 'hint' }, [w]));
+  } catch (err) {
+    statusEl.appendChild(el('p', { class: 'hint' }, [err.message || '저장 실패']));
+  }
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (!plan.dirty) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
 // ---- Presets ----
 async function loadPresets() {
   try {
@@ -577,6 +884,8 @@ document.getElementById('eventsLoadBtn').addEventListener('click', async () => {
   await loadMembers();
   await initAreaMap();
   await loadAreas();
+  await initPlanMap();
+  await loadTeamPlans();
   await loadPresets();
   await loadTileKey();
   await loadAdmins();

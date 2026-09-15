@@ -42,3 +42,19 @@ a { color: var(--ink); }
 #dongResults { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
 .dong-item { padding: 5px 8px; border: 1px solid var(--line); cursor: pointer; font-size: 0.9rem; }
 .dong-item.selected { background: var(--ink); color: var(--paper); }
+
+.plan-row { border: 1px solid var(--line); margin-bottom: 6px; }
+.plan-row-header { padding: 8px 10px; cursor: pointer; font-weight: 700; }
+.plan-row-header.open { background: var(--ink); color: var(--paper); }
+.plan-form { padding: 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.plan-form label { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+.plan-form select, .plan-form input[type="text"], .plan-form input:not([type]) {
+  padding: 6px; border: 1px solid var(--line); border-radius: 0; background: var(--paper); color: var(--ink);
+}
+.loc-picker { border: 1px dashed var(--faint); padding: 6px; margin: 4px 0; }
+.cp-item { border-top: 1px dotted var(--faint); padding-top: 6px; margin-top: 6px; }
+.rally-icon { width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 12px solid var(--ink); }
+.cp-icon {
+  background: var(--paper); border: 2px solid var(--ink); width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--ink);
+}
