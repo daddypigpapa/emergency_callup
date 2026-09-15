@@ -233,9 +233,11 @@ func (s *Server) handleAreasList(w http.ResponseWriter, r *http.Request) {
 	out := make([]any, 0, len(list))
 	for i := range list {
 		a := &list[i]
+		size, cells := gridFieldsJSON(a)
 		out = append(out, map[string]any{
 			"id": a.ID, "name": a.Name, "kind": a.Kind, "lat": a.Lat, "lng": a.Lng, "r": a.RadiusM,
-			"polygon": polygonJSON(a), "nav": [2]float64{a.NavLat, a.NavLng}, "bbox": a.BBox,
+			"polygon": polygonJSON(a), "size": size, "cells": cells,
+			"nav": [2]float64{a.NavLat, a.NavLng}, "bbox": a.BBox,
 		})
 	}
 	writeJSON(w, map[string]any{"t": now.UnixMilli(), "areas": out})
@@ -248,7 +250,24 @@ type areaCreateRequest struct {
 	Lng     float64      `json:"lng"`
 	RadiusM int          `json:"r"`
 	Polygon [][2]float64 `json:"polygon"`
+	Size    int          `json:"size"`
+	Cells   [][2]int64   `json:"cells"`
 	Nav     *[2]float64  `json:"nav"`
+}
+
+func areaFromRequest(req areaCreateRequest) (poly []area.Point, cells []area.Cell, nav *area.Point) {
+	poly = make([]area.Point, len(req.Polygon))
+	for i, p := range req.Polygon {
+		poly[i] = area.Point{Lat: p[0], Lng: p[1]}
+	}
+	cells = make([]area.Cell, len(req.Cells))
+	for i, c := range req.Cells {
+		cells[i] = area.Cell{I: c[0], J: c[1]}
+	}
+	if req.Nav != nil {
+		nav = &area.Point{Lat: req.Nav[0], Lng: req.Nav[1]}
+	}
+	return
 }
 
 func (s *Server) handleAreaCreate(w http.ResponseWriter, r *http.Request) {
@@ -261,23 +280,18 @@ func (s *Server) handleAreaCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, now, "invalid", "요청 형식이 올바르지 않습니다.")
 		return
 	}
-	var nav *area.Point
-	if req.Nav != nil {
-		nav = &area.Point{Lat: req.Nav[0], Lng: req.Nav[1]}
-	}
+	poly, cells, nav := areaFromRequest(req)
 	var row *area.Row
 	var err error
 	switch req.Kind {
 	case area.KindCircle:
 		row, err = s.Areas.CreateCircle(r.Context(), req.Name, area.Point{Lat: req.Lat, Lng: req.Lng}, req.RadiusM, nav, now)
 	case area.KindPolygon:
-		poly := make([]area.Point, len(req.Polygon))
-		for i, p := range req.Polygon {
-			poly[i] = area.Point{Lat: p[0], Lng: p[1]}
-		}
 		row, err = s.Areas.CreatePolygon(r.Context(), req.Name, poly, nav, now)
+	case area.KindGrid:
+		row, err = s.Areas.CreateGrid(r.Context(), req.Name, req.Size, cells, nav, now)
 	default:
-		writeError(w, now, "invalid", "kind는 circle 또는 polygon이어야 합니다.")
+		writeError(w, now, "invalid", "kind는 circle, polygon, grid 중 하나여야 합니다.")
 		return
 	}
 	if err != nil {
@@ -286,6 +300,97 @@ func (s *Server) handleAreaCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.Audit.Record(r.Context(), now, audit.Event{Type: "area_create", Actor: audit.ActorAdmin(admin.LoginID)})
 	writeJSON(w, map[string]any{"t": now.UnixMilli(), "id": row.ID})
+}
+
+// handleAreaUpdate implements PUT /a/areas/{id} (docs/SPEC_AREA_EDITOR.md
+// §4.1) — edits an area in place, unlike handleAreaCopy which always
+// leaves the source row untouched. Refused with 409 while the area is in
+// use by the active incident (area.ErrAreaInUse).
+func (s *Server) handleAreaUpdate(w http.ResponseWriter, r *http.Request) {
+	now := s.Now()
+	admin := adminFromContext(r.Context())
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, now, "invalid", "지역 ID가 올바르지 않습니다.")
+		return
+	}
+	var req areaCreateRequest
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil || req.Name == "" {
+		writeError(w, now, "invalid", "요청 형식이 올바르지 않습니다.")
+		return
+	}
+	poly, cells, nav := areaFromRequest(req)
+	var row *area.Row
+	switch req.Kind {
+	case area.KindCircle:
+		row, err = s.Areas.UpdateCircle(r.Context(), id, req.Name, area.Point{Lat: req.Lat, Lng: req.Lng}, req.RadiusM, nav, now)
+	case area.KindPolygon:
+		row, err = s.Areas.UpdatePolygon(r.Context(), id, req.Name, poly, nav, now)
+	case area.KindGrid:
+		row, err = s.Areas.UpdateGrid(r.Context(), id, req.Name, req.Size, cells, nav, now)
+	default:
+		writeError(w, now, "invalid", "kind는 circle, polygon, grid 중 하나여야 합니다.")
+		return
+	}
+	if err != nil {
+		switch {
+		case errors.Is(err, area.ErrAreaInUse):
+			writeError(w, now, "conflict", "현재 활성 사건에서 사용 중인 지역은 수정할 수 없습니다.")
+		case errors.Is(err, area.ErrNotFound):
+			writeError(w, now, "invalid", "지역을 찾을 수 없습니다.")
+		default:
+			writeError(w, now, "invalid", err.Error())
+		}
+		return
+	}
+	_ = s.Audit.Record(r.Context(), now, audit.Event{Type: "area_update", Actor: audit.ActorAdmin(admin.LoginID)})
+	writeJSON(w, map[string]any{"t": now.UnixMilli(), "id": row.ID})
+}
+
+// handleAreaDelete implements DELETE /a/areas/{id} — a soft delete
+// (active=0), refused with 409 while in use by the active incident or
+// still referenced by a member's default area (docs/SPEC_AREA_EDITOR.md §4.1).
+func (s *Server) handleAreaDelete(w http.ResponseWriter, r *http.Request) {
+	now := s.Now()
+	admin := adminFromContext(r.Context())
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, now, "invalid", "지역 ID가 올바르지 않습니다.")
+		return
+	}
+	if err := s.Areas.Deactivate(r.Context(), id); err != nil {
+		switch {
+		case errors.Is(err, area.ErrAreaInUse):
+			writeError(w, now, "conflict", "현재 활성 사건에서 사용 중인 지역은 삭제할 수 없습니다.")
+		case errors.Is(err, area.ErrAreaReferenced):
+			writeError(w, now, "conflict", err.Error())
+		case errors.Is(err, area.ErrNotFound):
+			writeError(w, now, "invalid", "지역을 찾을 수 없습니다.")
+		default:
+			writeError(w, now, "server", "서버 오류가 발생했습니다.")
+		}
+		return
+	}
+	_ = s.Audit.Record(r.Context(), now, audit.Event{Type: "area_delete", Actor: audit.ActorAdmin(admin.LoginID)})
+	writeJSON(w, map[string]any{"t": now.UnixMilli()})
+}
+
+// handleGeoCell implements GET /a/geo/cell?size=&lat=&lng= — lets the
+// editor's JS cross-check its own cell math against the server's
+// (docs/SPEC_AREA_EDITOR.md §4.1).
+func (s *Server) handleGeoCell(w http.ResponseWriter, r *http.Request) {
+	now := s.Now()
+	size, errSize := strconv.Atoi(r.URL.Query().Get("size"))
+	lat, errLat := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
+	lng, errLng := strconv.ParseFloat(r.URL.Query().Get("lng"), 64)
+	if errSize != nil || errLat != nil || errLng != nil {
+		writeError(w, now, "invalid", "size, lat, lng 파라미터가 필요합니다.")
+		return
+	}
+	c := area.CellOf(size, area.Point{Lat: lat, Lng: lng})
+	writeJSON(w, map[string]any{"t": now.UnixMilli(), "i": c.I, "j": c.J, "bounds": area.CellBounds(size, c)})
 }
 
 func (s *Server) handleAreaCopy(w http.ResponseWriter, r *http.Request) {

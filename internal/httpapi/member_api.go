@@ -26,9 +26,11 @@ func areaJSON(a *area.Row) map[string]any {
 	if a.Kind == "circle" {
 		r = a.RadiusM
 	}
+	size, cells := gridFieldsJSON(a)
 	return map[string]any{
 		"name": a.Name, "kind": a.Kind, "lat": a.Lat, "lng": a.Lng, "r": r,
-		"polygon": polygon, "nav": [2]float64{a.NavLat, a.NavLng}, "bbox": a.BBox,
+		"polygon": polygon, "size": size, "cells": cells,
+		"nav": [2]float64{a.NavLat, a.NavLng}, "bbox": a.BBox,
 	}
 }
 

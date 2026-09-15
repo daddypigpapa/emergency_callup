@@ -81,9 +81,10 @@ func (s *Server) buildBoardPayload(w http.ResponseWriter, r *http.Request, since
 	areasJSON := make([]any, 0, len(areaRows))
 	for i := range areaRows {
 		a := &areaRows[i]
+		size, cells := gridFieldsJSON(a)
 		areasJSON = append(areasJSON, map[string]any{
 			"id": a.ID, "name": a.Name, "kind": a.Kind, "lat": a.Lat, "lng": a.Lng, "r": a.RadiusM,
-			"polygon": polygonJSON(a), "bbox": a.BBox,
+			"polygon": polygonJSON(a), "size": size, "cells": cells, "bbox": a.BBox,
 		})
 	}
 	body["areas"] = areasJSON
@@ -141,6 +142,20 @@ func polygonJSON(a *area.Row) any {
 		poly[i] = [2]float64{p.Lat, p.Lng}
 	}
 	return poly
+}
+
+// gridFieldsJSON returns (size, cells) for a grid-kind area, or (nil, nil)
+// otherwise (docs/SPEC_AREA_EDITOR.md §4.1/§4.5). cells is the [[i,j],...]
+// wire format shared with POST/PUT /a/areas.
+func gridFieldsJSON(a *area.Row) (size any, cells any) {
+	if a.Kind != area.KindGrid {
+		return nil, nil
+	}
+	pairs := make([][2]int64, len(a.Cells))
+	for i, c := range a.Cells {
+		pairs[i] = [2]int64{c.I, c.J}
+	}
+	return a.GridSize, pairs
 }
 
 func nullEmpty(s string) any {
