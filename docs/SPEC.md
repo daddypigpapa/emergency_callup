@@ -1047,7 +1047,15 @@ FIX_RETENTION_DAYS=30
 TRUST_PROXY=false              # true면 X-Forwarded-For 사용
 TLS_CERT_FILE=
 TLS_KEY_FILE=
+# 테스트 전용. 운영에서는 비우거나 0
+TEST_TOOLS=0
+TEST_ACCOUNTS_FILE=deploy/testkey.env
 ```
+
+- `TEST_TOOLS=1`이면 서버가 기동할 때 `TEST_ACCOUNTS_FILE`(기본 `deploy/testkey.env`)을 읽어, 한 줄에 `아이디=비밀번호` 형식으로 적힌 현장인력의 비밀번호를 그 값으로 설정한다(다음 로그인 때 변경 요구 없음). 빈 줄·`#` 주석 줄은 무시한다. 없는 아이디·정책 위반(8자 미만 등)·형식 오류는 줄 번호만 로그에 남기고 건너뛴다. 비밀번호는 로그에 남기지 않는다. 파일이 없어도 서버는 정상 기동한다.
+- §11.1 "기본 비밀번호 없음"의 예외는 이 테스트 기능뿐이다. 운영 배포에서는 `TEST_TOOLS`를 켜지 않는다. 켜져 있으면 기동 로그에 경고와 `TEST_TOOLS=ON`이 찍힌다.
+- `*.env`는 `.gitignore` 대상이라 `testkey.env`는 저장소에 올라가지 않는다. 형식 예시는 `deploy/testkey.env.example`.
+- Docker로 띄울 때는 파일을 컨테이너에 마운트하고 `TEST_ACCOUNTS_FILE`에 컨테이너 안 경로를 준다.
 
 ### 12.4 백업·점검
 
@@ -1246,6 +1254,7 @@ TLS_KEY_FILE=
 - **관리자가 지도 인증키를 화면에서 직접 설정**: 원래 설계에는 없던 기능. 배포 환경마다 다른 VWorld 키를 코드 수정·재배포 없이 바꿀 수 있도록 설정 테이블(`setting` 키-값 테이블, `internal/settings`)과 관리자 전용 API(`GET/PUT /api/v1/a/settings/tile-key`)를 추가.
 - **현장 화면 지도 포커스 버튼 3단계 동작**: §8.1.3의 단순 토글 대신, [내 위치]는 내 위치를 중앙에, [목적지]는 임무지역을 중앙에 각각 독립적으로 포커싱하고, 같은 버튼을 한 번 더 누르면 "내 위치+임무지역 둘 다 보기"로 돌아오는 3단계(`both`/`me`/`area`) 방식으로 구현. 사용자가 실사용 흐름을 시험해보며 구체화한 요구사항.
 - **`deploy/.env` → `deploy/key.env` 이름 변경**: 실제 인증키가 담긴 파일임을 이름에서 더 분명히 하기 위해 변경(`.gitignore`도 `*.env` 패턴으로 조정).
+- **`TEST_TOOLS` / `deploy/testkey.env` 추가** (§12.3): 테스트 때 출동인원 계정 비밀번호를 파일 하나로 일괄 지정. 관리자 화면 업로드 방식은 평문 비밀번호가 서버로 올라가는 통로가 되므로 택하지 않고, 서버 기동 시 로컬 파일을 읽는 방식으로 정함.
 
 ### 17.4 진행 예정
 

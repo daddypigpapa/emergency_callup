@@ -35,6 +35,12 @@ type Config struct {
 
 	TLSCertFile string
 	TLSKeyFile  string
+
+	// TestTools enables test-only conveniences (SPEC §12.3). Never set in
+	// production: with it on, the server sets field-member passwords from
+	// TestAccountsFile at startup.
+	TestTools        bool
+	TestAccountsFile string // id=password per line; default deploy/testkey.env
 }
 
 // SMSHTTPEnabled reports whether the http SMS provider should be registered.
@@ -67,10 +73,14 @@ func Load(getenv func(string) string) (*Config, error) {
 		SMSSender:           get("SMS_SENDER"),
 		TLSCertFile:         get("TLS_CERT_FILE"),
 		TLSKeyFile:          get("TLS_KEY_FILE"),
+		TestAccountsFile:    get("TEST_ACCOUNTS_FILE"),
 	}
 
 	if c.ListenAddr == "" {
 		c.ListenAddr = ":8080"
+	}
+	if c.TestAccountsFile == "" {
+		c.TestAccountsFile = "deploy/testkey.env"
 	}
 	if c.NaverRouteType == "" {
 		c.NaverRouteType = "car"
@@ -137,6 +147,14 @@ func Load(getenv func(string) string) (*Config, error) {
 		c.TrustProxy = v
 	}
 
+	if ttStr := get("TEST_TOOLS"); ttStr != "" {
+		if v, err := strconv.ParseBool(ttStr); err != nil {
+			errs = append(errs, "TEST_TOOLS must be 1/0 or true/false")
+		} else {
+			c.TestTools = v
+		}
+	}
+
 	if (c.TLSCertFile == "") != (c.TLSKeyFile == "") {
 		errs = append(errs, "TLS_CERT_FILE and TLS_KEY_FILE must both be set or both be empty")
 	}
@@ -158,10 +176,14 @@ func (c *Config) Summary() string {
 	if c.TLSEnabled() {
 		tls = "on (built-in)"
 	}
-	return fmt.Sprintf(
+	s := fmt.Sprintf(
 		"base_url=%s listen=%s data_dir=%s tile=%s sms=%s tls=%s fix_retention_days=%d trust_proxy=%v",
 		c.BaseURL, c.ListenAddr, c.DataDir, maskTileURL(c.TileURL), sms, tls, c.FixRetentionDays, c.TrustProxy,
 	)
+	if c.TestTools {
+		s += " TEST_TOOLS=ON"
+	}
+	return s
 }
 
 func maskTileURL(u string) string {

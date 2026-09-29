@@ -27,6 +27,7 @@ import (
 	"emergencycallup/internal/auth"
 	"emergencycallup/internal/config"
 	"emergencycallup/internal/httpapi"
+	"emergencycallup/internal/roster"
 	"emergencycallup/internal/store"
 )
 
@@ -55,6 +56,9 @@ func runServer() {
 	log.Printf("starting: %s", cfg.Summary())
 
 	srv := httpapi.NewServer(cfg, db)
+	if cfg.TestTools {
+		applyTestAccounts(cfg.TestAccountsFile, srv.Members)
+	}
 	srv.BackupHook = func(ctx context.Context) {
 		path, err := db.Backup(ctx, cfg.DataDir)
 		if err != nil {
@@ -139,6 +143,31 @@ func runServer() {
 	}
 	close(stopBackground)
 	bg.Wait()
+}
+
+// applyTestAccounts is the TEST_TOOLS startup step (SPEC §12.3): set the
+// passwords of the field members listed in path. A missing file or bad
+// lines are logged, never fatal — test tooling must not stop the server.
+// Passwords are never logged.
+func applyTestAccounts(path string, members *roster.Store) {
+	log.Printf("WARNING: TEST_TOOLS is on — test-only settings are active. Turn it off for real operation.")
+	f, err := os.Open(path)
+	if err != nil {
+		log.Printf("test accounts: cannot read %s: %v (skipped)", path, err)
+		return
+	}
+	defer f.Close()
+	accounts, problems, err := roster.ParseTestAccounts(f)
+	if err != nil {
+		log.Printf("test accounts: reading %s: %v", path, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	applied, applyProblems := members.ApplyTestAccounts(ctx, accounts)
+	for _, p := range append(problems, applyProblems...) {
+		log.Printf("test accounts: %s", p)
+	}
+	log.Printf("test accounts: %d password(s) set from %s", applied, path)
 }
 
 func seoulLocation() *time.Location {
