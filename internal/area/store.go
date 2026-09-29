@@ -206,6 +206,12 @@ func (s *Store) Deactivate(ctx context.Context, id int64) error {
 	return nil
 }
 
+// InUse reports whether the active incident references this area (the
+// condition under which Update*/Deactivate refuse).
+func (s *Store) InUse(ctx context.Context, id int64) (bool, error) {
+	return s.inUseByActiveIncident(ctx, id)
+}
+
 func (s *Store) inUseByActiveIncident(ctx context.Context, id int64) (bool, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `

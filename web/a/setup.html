@@ -29,6 +29,7 @@
     <div class="field-row">
       <input type="file" id="importFile" accept=".xlsx">
       <button class="action" id="importPreviewBtn">미리보기</button>
+      <a class="action" href="/api/v1/a/templates/roster">표준 서식 내려받기</a>
     </div>
     <div id="importResult"></div>
     <h2>등록된 인원</h2>
@@ -37,6 +38,15 @@
 
   <section id="panel-areas" class="panel">
     <h2>임무지역</h2>
+    <div class="import-block">
+      <h3>엑셀로 가져오기</h3>
+      <div class="field-row">
+        <input type="file" id="areaImportFile" accept=".xlsx">
+        <button class="action" id="areaImportPreviewBtn" type="button">미리보기</button>
+        <a class="action" href="/api/v1/a/templates/areas">표준 서식 내려받기</a>
+      </div>
+      <div id="areaImportResult"></div>
+    </div>
     <div class="area-editor">
       <div class="area-map-wrap"><div id="areaMapEl" class="area-map"></div></div>
       <div class="area-side">
@@ -95,6 +105,16 @@
   <section id="panel-teamplan" class="panel">
     <h2>조별 계획</h2>
     <p class="hint">평시에 조별 임무·임무지역·집결지·체크포인트를 미리 정해 두면, 발령 시 자동으로 채워집니다.</p>
+    <div class="import-block">
+      <h3>엑셀로 가져오기</h3>
+      <div class="field-row">
+        <input type="file" id="planImportFile" accept=".xlsx">
+        <button class="action" id="planImportPreviewBtn" type="button">미리보기</button>
+        <a class="action" href="/api/v1/a/templates/plans">표준 서식 내려받기</a>
+      </div>
+      <p class="hint">파일에 적은 조는 저장된 계획(체크포인트 포함)을 통째로 바꿉니다. 파일에 없는 조는 그대로 둡니다.</p>
+      <div id="planImportResult"></div>
+    </div>
     <div class="area-editor">
       <div class="area-map-wrap"><div id="planMapEl" class="area-map"></div></div>
       <div class="area-side">

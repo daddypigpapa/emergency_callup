@@ -311,6 +311,14 @@ type vworldGeocodeResponse struct {
 	} `json:"response"`
 }
 
+// Lookup is what spreadsheet importers need from this package: address and
+// administrative-dong resolution with the API key and referer already
+// bound by the caller. Tests substitute a fake.
+type Lookup interface {
+	Geocode(ctx context.Context, q string) (*GeocodeResult, error)
+	SearchAdminDong(ctx context.Context, q string) ([]AdminDong, error)
+}
+
 func (c *Client) getJSON(ctx context.Context, rawURL, referer string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {

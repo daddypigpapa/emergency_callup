@@ -229,6 +229,86 @@ func distPointToRect(px, py, x0, y0, x1, y1 float64) float64 {
 	return math.Hypot(dx, dy)
 }
 
+// maxScanCells bounds how many candidate cells the fill helpers below will
+// examine, so a huge radius or dong at a tiny cell size fails fast instead
+// of looping over millions of cells.
+const maxScanCells = 200000
+
+var ErrGridScanTooLarge = errors.New("area: region is too large for this grid size — use a larger cell size")
+
+func cellRange(size int, bbox [4]float64) (c0, c1 Cell, err error) {
+	c0 = CellOf(size, Point{Lat: bbox[0], Lng: bbox[1]})
+	c1 = CellOf(size, Point{Lat: bbox[2], Lng: bbox[3]})
+	if (c1.I-c0.I+1)*(c1.J-c0.J+1) > maxScanCells {
+		return c0, c1, ErrGridScanTooLarge
+	}
+	return c0, c1, nil
+}
+
+// CellsWithinRadius returns every cell whose center lies within radiusM of
+// center — always at least the cell containing center itself.
+func CellsWithinRadius(size int, center Point, radiusM int) ([]Cell, error) {
+	c0, c1, err := cellRange(size, CircleBBox(center, radiusM))
+	if err != nil {
+		return nil, err
+	}
+	out := []Cell{CellOf(size, center)}
+	for i := c0.I; i <= c1.I; i++ {
+		for j := c0.J; j <= c1.J; j++ {
+			c := Cell{I: i, J: j}
+			if Haversine(center, CellCenter(size, c)) <= float64(radiusM) {
+				out = append(out, c)
+			}
+		}
+	}
+	return DedupeSortCells(out), nil
+}
+
+// CellsInRings returns every cell whose center falls inside any of rings
+// ([[lat,lng],...] outer rings, e.g. an administrative-dong boundary).
+func CellsInRings(size int, rings [][][2]float64) ([]Cell, error) {
+	polys := make([][]Point, 0, len(rings))
+	first := true
+	var bbox [4]float64
+	for _, ring := range rings {
+		if len(ring) < 3 {
+			continue
+		}
+		poly := make([]Point, len(ring))
+		for k, p := range ring {
+			poly[k] = Point{Lat: p[0], Lng: p[1]}
+		}
+		b := PolygonBBox(poly)
+		if first {
+			bbox, first = b, false
+		} else {
+			bbox = [4]float64{math.Min(bbox[0], b[0]), math.Min(bbox[1], b[1]), math.Max(bbox[2], b[2]), math.Max(bbox[3], b[3])}
+		}
+		polys = append(polys, poly)
+	}
+	if len(polys) == 0 {
+		return nil, nil
+	}
+	c0, c1, err := cellRange(size, bbox)
+	if err != nil {
+		return nil, err
+	}
+	var out []Cell
+	for i := c0.I; i <= c1.I; i++ {
+		for j := c0.J; j <= c1.J; j++ {
+			c := Cell{I: i, J: j}
+			ctr := CellCenter(size, c)
+			for _, poly := range polys {
+				if PointInPolygon(ctr, poly) {
+					out = append(out, c)
+					break
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
 // REqGrid returns the "equivalent radius" used by SPEC §6.1's transmit
 // interval table: the radius of a circle with the same total area as the
 // grid selection.

@@ -556,7 +556,7 @@ CREATE TABLE sms_log (
 
 - 경로 접두어 `/api/v1`. v2 앱도 같은 API를 쓴다.
 - 인증: 쿠키 `sid`(HttpOnly, Secure, SameSite=Lax) **또는** `Authorization: Bearer <token>`(앱 대비). 둘 다 같은 session 테이블.
-- 상태 변경 요청은 `Content-Type: application/json` 필수(CSRF 완화). 아니면 415. **예외: `POST /a/members/import`만 `multipart/form-data`** 허용(이 경로는 SameSite 쿠키 + 역할 검사 + 파일 검증으로 보호).
+- 상태 변경 요청은 `Content-Type: application/json` 필수(CSRF 완화). 아니면 415. **예외: 엑셀 가져오기(`POST /a/members/import`, `/a/areas/import`, `/a/team-plans/import`)만 `multipart/form-data`** 허용(이 경로는 SameSite 쿠키 + 역할 검사 + 파일 검증으로 보호).
 - 모든 JSON 응답에 `t`(서버 UTC 밀리초) 포함. 클라이언트는 `t`로 시계 오차를 보정해 **현재시간을 표시**한다. 표시는 `Intl.DateTimeFormat('ko-KR', {timeZone:'Asia/Seoul', hour12:false})`.
 - 오류 형식: `{"t":..., "err":"코드", "msg":"사람이 읽을 문장"}`. 코드와 HTTP 상태: `auth` 401, `forbidden` 403, `invalid` 400, `conflict` 409, `resync` 409, `rate` 429, `busy` 503, `closed` 409(종료된 사건 수정 시도), `server` 500.
 - 현장 위치·동기화 응답의 `CLOSED`·`IDLE`·`NONE`은 오류가 아니라 **200 응답의 `st` 값**이다.
@@ -640,6 +640,9 @@ CREATE TABLE sms_log (
 | `GET/POST /a/members`, `PUT /a/members/{id}`   | 명단 조회·등록·수정. 등록 응답에 초기 비밀번호 1회 포함             |
 | `POST /a/members/import?mode=preview`          | xlsx 업로드 → 신규·변경·오류 행 목록(저장 안 함)              |
 | `POST /a/members/import?mode=commit`           | 미리보기 토큰으로 반영. 신규 인원 초기 비밀번호 목록은 이 응답에서만 1회 제공 |
+| `POST /a/areas/import?mode=preview\|commit`    | 임무지역 엑셀 가져오기(원·격자). 주소는 지오코딩, 격자는 행정동 또는 중심+반경으로 칸 채움. 같은 이름은 갱신(발령 중 사용 지역은 거부) |
+| `POST /a/team-plans/import?mode=preview\|commit` | 조별계획 엑셀 가져오기(시트 '조별계획'+'체크포인트'). 파일의 조는 계획 전체를 교체, 없는 조는 유지 |
+| `GET /a/templates/{roster\|areas\|plans}`       | 표준 서식(xlsx) 내려받기. 원본은 저장소 `templates/`, `make templates`로 재생성 |
 | `POST /a/members/{id}/password-reset`          | 임시 비밀번호 1회 표시, 해당 인원 세션 전부 삭제                 |
 | `PUT /a/members/{id}` `{active:false}`         | 비활성화 = 세션 즉시 삭제                               |
 | `GET/POST /a/areas`, `POST /a/areas/{id}/copy` | 지역 등록·복제(사용된 지역은 수정 불가)                       |
@@ -1254,6 +1257,7 @@ TEST_ACCOUNTS_FILE=deploy/testkey.env
 - **관리자가 지도 인증키를 화면에서 직접 설정**: 원래 설계에는 없던 기능. 배포 환경마다 다른 VWorld 키를 코드 수정·재배포 없이 바꿀 수 있도록 설정 테이블(`setting` 키-값 테이블, `internal/settings`)과 관리자 전용 API(`GET/PUT /api/v1/a/settings/tile-key`)를 추가.
 - **현장 화면 지도 포커스 버튼 3단계 동작**: §8.1.3의 단순 토글 대신, [내 위치]는 내 위치를 중앙에, [목적지]는 임무지역을 중앙에 각각 독립적으로 포커싱하고, 같은 버튼을 한 번 더 누르면 "내 위치+임무지역 둘 다 보기"로 돌아오는 3단계(`both`/`me`/`area`) 방식으로 구현. 사용자가 실사용 흐름을 시험해보며 구체화한 요구사항.
 - **`deploy/.env` → `deploy/key.env` 이름 변경**: 실제 인증키가 담긴 파일임을 이름에서 더 분명히 하기 위해 변경(`.gitignore`도 `*.env` 패턴으로 조정).
+- **임무지역·조별계획 엑셀 가져오기 + 표준 서식(`templates/`) 추가**: 명단과 같은 미리보기→반영 방식. 서식의 제목 줄은 각 가져오기 코드의 상수에서 생성되며, 저장소의 서식 파일이 코드와 어긋나면 테스트가 실패한다.
 - **`TEST_TOOLS` / `deploy/testkey.env` 추가** (§12.3): 테스트 때 출동인원 계정 비밀번호를 파일 하나로 일괄 지정. 관리자 화면 업로드 방식은 평문 비밀번호가 서버로 올라가는 통로가 되므로 택하지 않고, 서버 기동 시 로컬 파일을 읽는 방식으로 정함.
 
 ### 17.4 진행 예정

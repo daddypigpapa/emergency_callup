@@ -52,9 +52,9 @@ type Preview struct {
 	Rows      []ImportRow
 }
 
-// expectedHeader is the exact column order required by SPEC §8.2.6:
+// ImportHeader is the exact column order required by SPEC §8.2.6:
 // "소속, 이름, 행정전화, 휴대전화, 편성조, 임무내용, 임무지역, 비고, 로그인ID".
-var expectedHeader = []string{"소속", "이름", "행정전화", "휴대전화", "편성조", "임무내용", "임무지역", "비고", "로그인ID"}
+var ImportHeader = []string{"소속", "이름", "행정전화", "휴대전화", "편성조", "임무내용", "임무지역", "비고", "로그인ID"}
 
 const previewTTL = 10 * time.Minute
 
@@ -109,10 +109,10 @@ func (im *Importer) Preview(ctx context.Context, xlsxData []byte, now time.Time)
 		return nil, ErrEmptySheet
 	}
 	header := rawRows[0]
-	if len(header) < len(expectedHeader) {
+	if len(header) < len(ImportHeader) {
 		return nil, ErrBadHeader
 	}
-	for i, want := range expectedHeader {
+	for i, want := range ImportHeader {
 		if header[i] != want {
 			return nil, ErrBadHeader
 		}

@@ -1,6 +1,6 @@
 # SPEC §3.3, §14. Every phase requires `make test lint` to pass.
 
-.PHONY: build test lint sim run fmt vet
+.PHONY: build test lint sim run fmt vet templates
 
 BINARY := bin/server
 SIM_BINARY := bin/sim
@@ -31,6 +31,10 @@ lint: fmt vet
 		echo "lint OK: no innerHTML/outerHTML/insertAdjacentHTML/document.write outside vendor"; \
 	fi
 	@if [ -n "$$(gofmt -l .)" ]; then echo "lint FAILED: gofmt issues:"; gofmt -l .; exit 1; fi
+
+# Regenerate the standard import templates in templates/ (commit the result).
+templates:
+	go run ./cmd/gentemplates
 
 sim: build
 	./$(SIM_BINARY)

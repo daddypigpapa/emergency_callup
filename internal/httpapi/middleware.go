@@ -45,17 +45,21 @@ func tileOriginFrom(tileURL string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// multipartExemptPath is the one route allowed to use multipart/form-data
-// instead of JSON (SPEC §7.1: "예외: POST /a/members/import만
-// multipart/form-data 허용").
-const multipartExemptPath = "/api/v1/a/members/import"
+// multipartExemptPaths are the spreadsheet-import routes allowed to use
+// multipart/form-data instead of JSON (SPEC §7.1's import exception). Their
+// ?mode=commit step still sends JSON — the exemption only lifts the check.
+var multipartExemptPaths = map[string]bool{
+	"/api/v1/a/members/import":    true,
+	"/api/v1/a/areas/import":      true,
+	"/api/v1/a/team-plans/import": true,
+}
 
 // requireJSONContentType enforces SPEC §7.1: state-changing requests must
 // carry Content-Type: application/json, except the documented multipart
-// exception for member import, or a 415 is returned.
+// import exceptions, or a 415 is returned.
 func requireJSONContentType(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == multipartExemptPath {
+		if multipartExemptPaths[r.URL.Path] {
 			next.ServeHTTP(w, r)
 			return
 		}

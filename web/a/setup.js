@@ -840,6 +840,96 @@ window.addEventListener('beforeunload', (e) => {
   e.returnValue = '';
 });
 
+// ---- Spreadsheet imports for 임무지역 / 조별계획 (same preview → 반영 flow as 명단) ----
+const IMPORT_STATUS = { new: '신규', update: '변경', ok: '적용', error: '오류' };
+
+// Uploads the chosen file for preview. Returns the parsed JSON, or null
+// after rendering the reason into resultEl.
+async function importPreview(path, fileInput, resultEl) {
+  clearChildren(resultEl);
+  if (!fileInput.files[0]) {
+    resultEl.appendChild(el('p', { class: 'hint' }, ['엑셀 파일을 먼저 선택하세요.']));
+    return null;
+  }
+  const form = new FormData();
+  form.append('file', fileInput.files[0]);
+  resultEl.appendChild(el('p', { class: 'hint' }, ['확인하는 중… (주소·행정동 조회가 있으면 조금 걸립니다)']));
+  const res = await api.raw('POST', `${path}?mode=preview`, { body: form });
+  const data = await res.json().catch(() => ({}));
+  clearChildren(resultEl);
+  if (res.status === 401) { window.location.href = '/a/'; return null; }
+  if (!res.ok) {
+    resultEl.appendChild(el('p', { class: 'error-text' }, [data.msg || '가져오기 실패']));
+    return null;
+  }
+  return data;
+}
+
+function importTable(headers, rows) {
+  return el('table', {}, [
+    el('thead', {}, [el('tr', {}, headers.map((h) => el('th', {}, [h])))]),
+    el('tbody', {}, rows.map(({ cells, error }) => el('tr', {}, cells.map((c, i) =>
+      el('td', i === cells.length - 2 && error ? { class: 'error' } : {}, [c]))))),
+  ]);
+}
+
+function importCommitButton(resultEl, okCount, onCommit) {
+  const btn = el('button', { class: 'action', type: 'button' },
+    [okCount ? `${okCount}건 반영 (오류 행은 건너뜀)` : '반영할 행이 없습니다']);
+  btn.disabled = okCount === 0;
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const msg = await onCommit();
+      clearChildren(resultEl);
+      resultEl.appendChild(el('p', {}, [msg]));
+    } catch (err) {
+      resultEl.appendChild(el('p', { class: 'error-text' }, [err.message || '반영 실패']));
+      btn.disabled = false;
+    }
+  });
+  return btn;
+}
+
+document.getElementById('areaImportPreviewBtn').addEventListener('click', async () => {
+  const resultEl = document.getElementById('areaImportResult');
+  const data = await importPreview('/a/areas/import', document.getElementById('areaImportFile'), resultEl);
+  if (!data) return;
+  resultEl.appendChild(importTable(['행', '이름', '내용', '상태', '오류/확인'], data.rows.map((r) => ({
+    error: r.status === 'error',
+    cells: [String(r.rowNum), r.name, r.summary || '', IMPORT_STATUS[r.status] || r.status, r.errors.concat(r.warnings).join(' / ')],
+  }))));
+  const okCount = data.rows.filter((r) => r.status !== 'error').length;
+  resultEl.appendChild(importCommitButton(resultEl, okCount, async () => {
+    const res = await api.post('/a/areas/import?mode=commit', { token: data.token });
+    await loadAreas();
+    plan.areas = (await api.get('/a/areas')).areas; // 조별계획's area dropdown
+    if (plan.expanded != null) renderTeamPlanList();
+    return `반영했습니다: 신규 ${res.created}건, 변경 ${res.updated}건` +
+      (res.failed.length ? ` · 저장 실패 ${res.failed.length}건 — ${res.failed.join(' / ')}` : '');
+  }));
+});
+
+document.getElementById('planImportPreviewBtn').addEventListener('click', async () => {
+  const resultEl = document.getElementById('planImportResult');
+  const data = await importPreview('/a/team-plans/import', document.getElementById('planImportFile'), resultEl);
+  if (!data) return;
+  resultEl.appendChild(importTable(['행', '조', '임무', '임무지역', '집결지', '체크포인트', '상태', '오류/확인'], data.teams.map((t) => ({
+    error: t.status === 'error',
+    cells: [String(t.rowNum), t.teamNo ? `${t.teamNo}조` : '', t.mission || '', t.areaName || '', t.rally,
+      `${t.cpCount}개`, IMPORT_STATUS[t.status] || t.status, t.errors.concat(t.warnings).join(' / ')],
+  }))));
+  const okCount = data.teams.filter((t) => t.status === 'ok').length;
+  resultEl.appendChild(importCommitButton(resultEl, okCount, async () => {
+    if (plan.dirty && !confirm('화면에서 고치고 저장하지 않은 조별계획이 있습니다. 가져오기를 반영하면 그 내용은 사라집니다. 계속할까요?')) {
+      throw new Error('취소했습니다.');
+    }
+    const res = await api.post('/a/team-plans/import?mode=commit', { token: data.token });
+    await loadTeamPlans();
+    return `반영했습니다: ${res.saved}개 조`;
+  }));
+});
+
 // ---- Presets ----
 async function loadPresets() {
   try {

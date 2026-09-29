@@ -43,7 +43,10 @@ type Server struct {
 	SMS       *sms.Service
 	Settings  *settings.Store
 	Plans     *incident.PlanStore
-	Geo       *geo.Client
+
+	AreaImporter *area.Importer
+	PlanImporter *incident.PlanImporter
+	Geo          *geo.Client
 
 	// geoCache holds GET /a/geo/admin results for 10 minutes
 	// (docs/SPEC_AREA_EDITOR.md §4.2) — best-effort, not persisted.
@@ -84,7 +87,7 @@ func NewServer(cfg *config.Config, db *store.DB) *Server {
 		}
 	}
 
-	return &Server{
+	s := &Server{
 		Cfg:       cfg,
 		DB:        db,
 		Hasher:    hasher,
@@ -106,6 +109,22 @@ func NewServer(cfg *config.Config, db *store.DB) *Server {
 		Now:       time.Now,
 		startedAt: time.Now(),
 	}
+	s.AreaImporter = area.NewImporter(areas, serverLookup{s})
+	s.PlanImporter = incident.NewPlanImporter(plans, areas, serverLookup{s})
+	return s
+}
+
+// serverLookup gives the spreadsheet importers address/행정동 resolution
+// through this server's VWorld client, reading s.Geo and the tile key at
+// call time (the key can change from the admin screen; tests swap s.Geo).
+type serverLookup struct{ s *Server }
+
+func (l serverLookup) Geocode(ctx context.Context, q string) (*geo.GeocodeResult, error) {
+	return l.s.Geo.Geocode(ctx, l.s.effectiveTileKey(ctx), q)
+}
+
+func (l serverLookup) SearchAdminDong(ctx context.Context, q string) ([]geo.AdminDong, error) {
+	return l.s.Geo.SearchAdminDong(ctx, l.s.effectiveTileKey(ctx), l.s.Cfg.BaseURL+"/", q)
 }
 
 // sessionCookieName is the single cookie this system uses (SPEC §2.1: "쿠키는
@@ -165,6 +184,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/a/geo/geocode", s.requireAdminSession(auth.RoleAdmin, s.handleGeoGeocode))
 	mux.HandleFunc("GET /api/v1/a/team-plans", s.requireAdminSession(auth.RoleOperator, s.handleTeamPlansList))
 	mux.HandleFunc("PUT /api/v1/a/team-plans", s.requireAdminSession(auth.RoleAdmin, s.handleTeamPlansSave))
+	mux.HandleFunc("POST /api/v1/a/areas/import", s.requireAdminSession(auth.RoleAdmin, s.handleAreaImport))
+	mux.HandleFunc("POST /api/v1/a/team-plans/import", s.requireAdminSession(auth.RoleAdmin, s.handlePlanImport))
+	mux.HandleFunc("GET /api/v1/a/templates/{kind}", s.requireAdminSession(auth.RoleAdmin, s.handleTemplateDownload))
 	mux.HandleFunc("GET /api/v1/a/presets", s.requireAdminSession(auth.RoleAdmin, s.handlePresetsList))
 	mux.HandleFunc("POST /api/v1/a/presets", s.requireAdminSession(auth.RoleAdmin, s.handlePresetCreate))
 	mux.HandleFunc("PUT /api/v1/a/presets/{id}", s.requireAdminSession(auth.RoleAdmin, s.handlePresetUpdate))

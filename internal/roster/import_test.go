@@ -16,7 +16,7 @@ func buildXLSX(t *testing.T, rows [][]string) []byte {
 	f := excelize.NewFile()
 	defer f.Close()
 	sheet := f.GetSheetName(0)
-	for r, row := range append([][]string{expectedHeader}, rows...) {
+	for r, row := range append([][]string{ImportHeader}, rows...) {
 		for c, v := range row {
 			cellRef, _ := excelize.CoordinatesToCellName(c+1, r+1)
 			if err := f.SetCellStr(sheet, cellRef, v); err != nil {
