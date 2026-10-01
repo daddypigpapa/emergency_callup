@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -246,7 +247,18 @@ func (s *Server) handleIncidentDraft(w http.ResponseWriter, r *http.Request) {
 	for _, o := range draft.Overrides {
 		overrides = append(overrides, map[string]any{"memberId": o.MemberID, "name": o.Name, "teamNo": o.TeamNo, "mission": o.Mission, "areaId": o.AreaID})
 	}
-	writeJSON(w, map[string]any{"t": now.UnixMilli(), "teams": teams, "overrides": overrides})
+	// Active areas for the per-team area picker: the board snapshot only
+	// carries areas of the running incident, so it is empty between incidents.
+	areaRows, err := s.Areas.List(r.Context(), true)
+	if err != nil {
+		writeError(w, now, "server", "서버 오류가 발생했습니다.")
+		return
+	}
+	areas := make([]any, 0, len(areaRows))
+	for _, a := range areaRows {
+		areas = append(areas, map[string]any{"id": a.ID, "name": a.Name})
+	}
+	writeJSON(w, map[string]any{"t": now.UnixMilli(), "teams": teams, "overrides": overrides, "areas": areas})
 }
 
 type incidentOpenRequest struct {
@@ -396,6 +408,10 @@ func (s *Server) handleIncidentAddMember(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := s.Incidents.AddMember(r.Context(), inc.ID, req.MemberID, req.TeamNo, req.Mission, req.AreaID, audit.ActorAdmin(admin.LoginID), now); err != nil {
+		if errors.Is(err, incident.ErrTeamTaskNotFound) {
+			writeError(w, now, "invalid", fmt.Sprintf("이번 발령에 %d조가 없습니다. 발령에 포함된 조를 선택하세요.", req.TeamNo))
+			return
+		}
 		writeError(w, now, "server", "서버 오류가 발생했습니다.")
 		return
 	}

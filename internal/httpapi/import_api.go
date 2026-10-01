@@ -133,7 +133,26 @@ func (s *Server) handlePlanImport(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = s.Audit.Record(r.Context(), now, audit.Event{Type: "team_plan_import", Actor: audit.ActorAdmin(admin.LoginID),
 			Data: map[string]any{"saved": saved}})
-		writeJSON(w, map[string]any{"t": now.UnixMilli(), "saved": saved})
+		// Same as saving on screen: a running incident picks up the plans.
+		plans, err := s.Plans.List(r.Context())
+		if err != nil {
+			writeError(w, now, "server", "서버 오류가 발생했습니다.")
+			return
+		}
+		teams := make([]int64, 0, len(plans))
+		for _, p := range plans {
+			teams = append(teams, p.TeamNo)
+		}
+		applied, err := s.refreshActivePlans(r.Context(), teams, audit.ActorAdmin(admin.LoginID), now)
+		if err != nil {
+			writeError(w, now, "server", "계획은 저장했지만 진행 중인 발령에 반영하지 못했습니다.")
+			return
+		}
+		body := map[string]any{"t": now.UnixMilli(), "saved": saved}
+		if len(applied) > 0 {
+			body["applied"] = applied
+		}
+		writeJSON(w, body)
 	default:
 		writeError(w, now, "invalid", "mode는 preview 또는 commit이어야 합니다.")
 	}

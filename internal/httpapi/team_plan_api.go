@@ -3,7 +3,9 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"time"
 
 	"emergencycallup/internal/area"
 	"emergencycallup/internal/audit"
@@ -122,9 +124,47 @@ func (s *Server) handleTeamPlansSave(w http.ResponseWriter, r *http.Request) {
 	_ = s.Audit.Record(r.Context(), now, audit.Event{Type: "team_plan_update", Actor: audit.ActorAdmin(admin.LoginID),
 		Data: map[string]any{"teams": changedTeams}})
 
+	applied, err := s.refreshActivePlans(r.Context(), changedTeams, audit.ActorAdmin(admin.LoginID), now)
+	if err != nil {
+		writeError(w, now, "server", "계획은 저장했지만 진행 중인 발령에 반영하지 못했습니다.")
+		return
+	}
+
 	body := map[string]any{"t": now.UnixMilli()}
+	if len(applied) > 0 {
+		body["applied"] = applied
+	}
 	if len(warnings) > 0 {
 		body["warnings"] = warnings
 	}
 	writeJSON(w, body)
+}
+
+// refreshActivePlans copies the just-saved plans of the given teams into
+// the running incident, if any, so new rally points and checkpoints take
+// effect without opening a new incident. Returns the teams that changed.
+func (s *Server) refreshActivePlans(ctx context.Context, teams []int64, actor string, now time.Time) ([]int64, error) {
+	inc, err := s.Incidents.GetActive(ctx)
+	if errors.Is(err, incident.ErrNoActiveIncident) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var applied []int64
+	for _, no := range teams {
+		changed, err := s.Incidents.RefreshTeamPlan(ctx, inc.ID, no, actor, now)
+		if err != nil {
+			return applied, err
+		}
+		if changed {
+			applied = append(applied, no)
+		}
+	}
+	if len(applied) > 0 {
+		if err := s.Tracker.LoadActive(ctx); err != nil {
+			return applied, err
+		}
+	}
+	return applied, nil
 }

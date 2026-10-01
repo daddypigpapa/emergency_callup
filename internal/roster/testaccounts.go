@@ -47,9 +47,15 @@ func ParseTestAccounts(r io.Reader) (accounts []TestAccount, problems []string, 
 	return accounts, problems, sc.Err()
 }
 
+// TestPasswordMinLen is the looser length rule for TEST_TOOLS accounts
+// (short PINs are convenient when testing on phones). Real accounts keep
+// the 8-character policy in auth.ValidatePasswordPolicy.
+const TestPasswordMinLen = 4
+
 // ApplyTestAccounts sets each listed member's password (no forced change on
 // next login) and reports how many were applied plus a problem per line
-// that wasn't: unknown login ID, or a password failing the policy.
+// that wasn't: unknown login ID, or a password shorter than
+// TestPasswordMinLen.
 func (s *Store) ApplyTestAccounts(ctx context.Context, accounts []TestAccount) (applied int, problems []string) {
 	for _, a := range accounts {
 		m, err := s.GetByLoginID(ctx, a.LoginID)
@@ -61,7 +67,11 @@ func (s *Store) ApplyTestAccounts(ctx context.Context, accounts []TestAccount) (
 			problems = append(problems, fmt.Sprintf("line %d (%s): %v", a.Line, a.LoginID, err))
 			continue
 		}
-		if err := s.SetPassword(ctx, m.ID, a.Password, false); err != nil {
+		if len(a.Password) < TestPasswordMinLen {
+			problems = append(problems, fmt.Sprintf("line %d (%s): password must be at least %d characters", a.Line, a.LoginID, TestPasswordMinLen))
+			continue
+		}
+		if err := s.storePassword(ctx, m.ID, a.Password, false); err != nil {
 			problems = append(problems, fmt.Sprintf("line %d (%s): %v", a.Line, a.LoginID, err))
 			continue
 		}

@@ -443,32 +443,64 @@ async function openNewIncidentSheet() {
   const draft = await api.get('/a/incidents/draft');
   const typeInput = el('input', { type: 'text', placeholder: '발령종류 (예: 비상 2단계)' }, []);
   const msgInput = el('textarea', { rows: '3', placeholder: '메시지' }, []);
+  // One row per team that has members. A team is included only when its
+  // box is checked; it starts checked when the draft already has both a
+  // mission and an area, so teams without a plan don't block the whole
+  // incident (the server rejects any included team missing either value).
   const teamRows = draft.teams.map((t) => {
-    const areaSelect = el('select', {}, board.areas.map((a) => {
-      const opt = el('option', { value: a.id }, [a.name]);
-      if (a.id === t.areaId) opt.selected = true;
-      return opt;
-    }));
-    const missionInput = el('input', { type: 'text', value: t.mission || '' }, []);
-    return el('div', { class: 'roster-row' }, [
-      el('span', { class: 'name' }, [`${t.teamNo}조 (${t.memberCount}명)`]),
+    const include = el('input', { type: 'checkbox' }, []);
+    include.checked = Boolean(t.mission && t.areaId);
+    const areaSelect = el('select', {}, [
+      el('option', { value: '0' }, ['(임무지역 선택)']),
+      ...(draft.areas || []).map((a) => el('option', { value: a.id }, [a.name])),
+    ]);
+    areaSelect.value = String(t.areaId || 0);
+    const missionInput = el('input', { type: 'text', value: t.mission || '', placeholder: '임무' }, []);
+    // Filling in a mission/area for an unchecked team checks it.
+    const autoInclude = () => { if (missionInput.value.trim() && areaSelect.value !== '0') include.checked = true; };
+    missionInput.addEventListener('input', autoInclude);
+    areaSelect.addEventListener('change', autoInclude);
+    const row = el('div', { class: 'roster-row' }, [
+      el('label', { class: 'name' }, [include, ` ${t.no}조 (${t.memberCount}명)`]),
       missionInput, areaSelect,
     ]);
+    return { t, row, include, missionInput, areaSelect };
   });
+  const errorBox = el('p', { class: 'error-text' }, []);
   els.incidentSheetBody.appendChild(el('div', {}, [
     el('label', {}, ['발령종류']), typeInput,
     el('label', {}, ['메시지']), msgInput,
-    el('label', {}, ['조별 임무·지역 (자동 채움, 필요 시 수정)']),
-    ...teamRows,
+    el('label', {}, ['조별 임무·지역 (체크한 조만 발령, 자동 채움·필요 시 수정)']),
+    ...teamRows.map((r) => r.row),
+    errorBox,
     el('button', {
       class: 'primary', type: 'button', onclick: async () => {
-        const teams = draft.teams.map((t, i) => ({
-          no: t.teamNo,
-          mission: teamRows[i].querySelectorAll('input,select')[0].value,
-          areaId: Number(teamRows[i].querySelectorAll('input,select')[1].value),
+        setText(errorBox, '');
+        const picked = teamRows.filter((r) => r.include.checked);
+        if (picked.length === 0) {
+          setText(errorBox, '발령할 조를 하나 이상 체크하세요.');
+          return;
+        }
+        const missing = picked.filter((r) => !r.missionInput.value.trim() || r.areaSelect.value === '0');
+        if (missing.length) {
+          setText(errorBox, `${missing.map((r) => `${r.t.no}조`).join(', ')}: 임무와 임무지역을 모두 입력하세요.`);
+          return;
+        }
+        const teams = picked.map((r) => ({
+          no: r.t.no,
+          mission: r.missionInput.value.trim(),
+          areaId: Number(r.areaSelect.value),
         }));
-        const members = draft.overrides.map((o) => ({ id: o.memberId, mission: o.mission, areaId: o.areaId }));
-        await api.post('/a/incidents', { type: typeInput.value, message: msgInput.value, teams, members });
+        const pickedNos = new Set(teams.map((t) => t.no));
+        const members = draft.overrides
+          .filter((o) => pickedNos.has(o.teamNo))
+          .map((o) => ({ id: o.memberId, mission: o.mission, areaId: o.areaId }));
+        try {
+          await api.post('/a/incidents', { type: typeInput.value, message: msgInput.value, teams, members });
+        } catch (err) {
+          setText(errorBox, err instanceof ApiError ? (err.message || '발령에 실패했습니다.') : '오류가 발생했습니다.');
+          return;
+        }
         els.incidentSheet.close();
         await fetchSnapshot();
       },

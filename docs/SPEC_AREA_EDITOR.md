@@ -27,7 +27,7 @@
 2. **`area.kind`에 `'grid'`를 추가하려면 `area` 테이블을 재생성해야 한다.** `001_init.sql`의 `CHECK (kind IN ('circle','polygon'))`은 ALTER로 못 바꾼다. 마이그레이션 러너에 FK-off 지시자를 추가한다 (§3.6).
 3. **격자 판정은 다각형 변환 없이 칸 집합으로 직접 한다.** 칸 합집합 외곽선을 계산하지 않는다. "점이 어느 칸에 있나"는 O(1), 경계 거리는 칸별 사각형 거리의 최솟값이다 (§3.3).
 4. **집결지는 기존 `nav`(길안내 목적지) 개념을 조 단위로 끌어올린 것이다.** 현장 화면은 이미 `area.nav`로 길안내·마커를 그리므로, 서버가 `/f/me` 응답의 `area.nav`를 조의 집결지로 덮어쓰면 현장 화면 변경이 최소화된다.
-5. **조별 계획은 평시 데이터, 발령 시 `team_task`로 복사(스냅샷)된다.** 상황 중에 계획을 고쳐도 진행 중인 발령에는 영향이 없다 (본 SPEC의 "상황 중 지역 불변" 원칙).
+5. **조별 계획은 평시 데이터, 발령 시 `team_task`로 복사(스냅샷)된다.** 발령 중에 계획을 저장(화면 저장·엑셀 가져오기)하면 그 조의 **집결지·체크포인트만** 진행 중인 발령에 즉시 다시 복사된다(2026-10-01 사용자 결정). 임무·임무지역은 발령에서 정한 값을 유지한다. 계획의 임무지역이 발령의 임무지역과 다르면 발령 시와 같이 그 지역 기본값(nav, 체크포인트 없음)을 쓴다. 바뀐 조의 대원(개인 지역 오버라이드 없는 사람)은 `mission_ver`가 올라가 현장 화면에 변경 알림이 뜨고 지도를 다시 그린다.
 6. **행정동 선택은 "그 동에 속한 칸을 한꺼번에 고르는 것"이다.** 동 경계 다각형 자체를 임무지역으로 저장하지 않는다. 격자가 기본 단위라는 요구(§0)에 맞추고, 저장 형식·판정 로직을 하나로 유지한다. 동 경계선은 편집 중 참고선으로만 점선 표시한다.
 7. **기존 원(circle) 임무지역과 API는 그대로 둔다.** 설정 화면에서 원 만들기도 계속 가능하다. 다각형(`polygon`)은 API로만 만들 수 있는 현 상태를 유지한다(그리기 UI는 범위 밖).
 
@@ -229,6 +229,7 @@ func REqGrid(size int, cells []Cell) float64      // sqrt(n*size²/π)
 
 - `GET /a/incidents/draft`: `teams[]`에 `fromPlan: true|false`, `rally`, `checkpoints` 추가. `BuildDraft`는 **`team_plan`에 그 조의 `mission`(비어있지 않음) 또는 `area_id`가 있으면 그 값을 우선**하고, 없는 항목만 기존 §5.4 다수값 규칙으로 채운다. 개인 오버라이드 규칙(§5.4 rule 2)은 "조 기본값과 다른 개인 평시값" 기준 그대로.
 - `POST /a/incidents`, `PUT /a/incidents/current/teams/{no}`: §3.5 스냅샷.
+- `PUT /a/team-plans`, `POST /a/team-plans/import?mode=commit`: 진행 중인 발령이 있으면 저장한 조의 집결지·체크포인트를 다시 스냅샷(§1 원칙 5). 실제로 바뀐 조 번호를 응답 `applied: [no, ...]`로 돌려준다(없으면 생략).
 - `GET /a/snapshot`, `GET /a/delta`: `teams[]`에 `rally:[lat,lng]`, `cps:[[seq,lat,lng],...]` 추가. `areas[]`에 grid 필드 추가.
 - `GET /f/me`: `task.area.nav` = 집결지(§3.5). `task.cps: [[seq,name,lat,lng], ...]` 추가(없으면 생략). `task.area`에 `size`, `cells` 포함(grid일 때; `polygon`은 null).
 
@@ -314,7 +315,7 @@ func REqGrid(size int, cells []Cell) float64      // sqrt(n*size²/π)
 | R23 | 마이그레이션 003: 001·002가 적용된 DB에 circle 지역 1 + 그것을 참조하는 member 1을 넣고 003 적용 → 지역·참조 유지, `foreign_key_check` 0행, `kind='grid'` INSERT 가능 | |
 | R24 | `PUT /a/team-plans`: 조 2개 저장 후 GET → 저장한 값, 나머지 8개는 빈 값. 체크포인트 3개 → seq 1,2,3. 다시 2개로 저장 → seq 1,2만 남음 | |
 | R25 | 발령 스냅샷: 계획(지역 A, 집결지 수동, cp 2개)이 있는 조를 지역 A로 발령 → `team_task.rally`=수동값, `checkpoints` 2개. 지역 B로 발령 → rally=B의 nav, checkpoints NULL | |
-| R26 | 발령 후 계획을 바꿔도 `/f/me`의 nav·cps 불변 | |
+| R26 | 발령 중 계획을 저장하면 그 조의 `/f/me` nav·cps가 새 계획으로 바뀌고 `mv`가 1 오른다. 임무·임무지역은 그대로. 같은 계획을 다시 저장하면 변화 없음 | |
 | R27 | 활성 사건이 쓰는 지역 `PUT`/`DELETE` → 409 | |
 | R28 | `BuildDraft`: 계획에 임무만 있고 지역이 없는 조 → 임무는 계획값, 지역은 §5.4 다수값 | |
 | R29 | `/a/geo/geocode`에 국가지점번호 패턴 → 400. 지오코더 HTTP 테스트는 `httptest.Server`로 VWorld 응답을 흉내내어 road 실패→parcel 재시도를 확인 | |

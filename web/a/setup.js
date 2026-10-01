@@ -520,6 +520,11 @@ function cpIcon(n) { return L.divIcon({ className: 'cp-icon', iconSize: [18, 18]
 // redraws without moving the view — used while the admin is clicking
 // around the map to place a point, where re-fitting on every click would
 // yank the map out from under them.
+// Teams whose saved plan was copied into the running incident.
+function appliedText(teams) {
+  return `진행 중인 발령에 바로 반영: ${teams.map((n) => `${n}조`).join(', ')} (집결지·체크포인트)`;
+}
+
 function focusTeamOnMap(no, fit = true) {
   planLayer.clearLayers();
   const t = plan.teams.get(no);
@@ -828,6 +833,7 @@ document.getElementById('teamPlanSaveAllBtn').addEventListener('click', async ()
     plan.dirty = false;
     const time = new Date(res.t).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' });
     statusEl.appendChild(el('p', {}, [`저장됨 ${time}`]));
+    if (res.applied) statusEl.appendChild(el('p', {}, [appliedText(res.applied)]));
     for (const w of res.warnings || []) statusEl.appendChild(el('p', { class: 'hint' }, [w]));
   } catch (err) {
     statusEl.appendChild(el('p', { class: 'hint' }, [err.message || '저장 실패']));
@@ -926,7 +932,7 @@ document.getElementById('planImportPreviewBtn').addEventListener('click', async 
     }
     const res = await api.post('/a/team-plans/import?mode=commit', { token: data.token });
     await loadTeamPlans();
-    return `반영했습니다: ${res.saved}개 조`;
+    return `반영했습니다: ${res.saved}개 조` + (res.applied ? ` · ${appliedText(res.applied)}` : '');
   }));
 });
 

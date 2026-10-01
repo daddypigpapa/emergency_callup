@@ -100,8 +100,9 @@ func TestOpen_SnapshotsAreaNavWhenPlanRallyIsAutomatic(t *testing.T) {
 	}
 }
 
-// R26: editing a team's plan after an incident opened must not change the
-// already-snapshotted team_task.
+// R26: saving a plan alone does not touch the running incident's
+// team_task; the HTTP layer applies it explicitly with RefreshTeamPlan
+// (tested below).
 func TestOpen_LaterPlanEditsDoNotAffectOpenIncident(t *testing.T) {
 	inc, members, areas := setup(t)
 	ctx := context.Background()
@@ -192,5 +193,67 @@ func TestBuildDraft_PlanPriorityIsPerField(t *testing.T) {
 	}
 	if team.AreaID != a1 {
 		t.Errorf("area = %d, want majority-vote area %d (plan didn't set one)", team.AreaID, a1)
+	}
+}
+
+// Saving a plan during an incident and then calling RefreshTeamPlan copies
+// the new rally point and checkpoints into the running incident, keeps the
+// incident's own mission, and bumps the members' mission version so their
+// phones reload. A second call with nothing new reports no change.
+func TestRefreshTeamPlan_AppliesSavedPlanToRunningIncident(t *testing.T) {
+	inc, members, areas := setup(t)
+	ctx := context.Background()
+	a1 := mustArea(t, areas, "지역A", 35.87, 128.60)
+	mustMember(t, members, 2, "", 0, "00000002")
+
+	got, err := inc.Open(ctx, "유형", "메시지", []TeamInput{{No: 2, Mission: "발령임무", AreaID: a1}}, nil, "admin1", time.Now())
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	before, err := inc.ListAssignments(ctx, got.ID)
+	if err != nil || len(before) != 1 {
+		t.Fatalf("assignments = %v, %v", before, err)
+	}
+
+	plans := NewPlanStore(inc.db)
+	rallyLat, rallyLng := 35.871, 128.601
+	if err := plans.SaveBatch(ctx, []TeamPlanInput{
+		{No: 2, Mission: "계획임무", AreaID: a1, RallyLat: &rallyLat, RallyLng: &rallyLng,
+			Checkpoints: []Checkpoint{{Name: "cp1", Lat: 35.868, Lng: 128.598}, {Name: "cp2", Lat: 35.869, Lng: 128.599}}},
+	}, "admin1", 2000); err != nil {
+		t.Fatalf("save plan: %v", err)
+	}
+
+	changed, err := inc.RefreshTeamPlan(ctx, got.ID, 2, "admin1", time.Now())
+	if err != nil || !changed {
+		t.Fatalf("refresh = %v, %v; want true, nil", changed, err)
+	}
+	tt, err := inc.GetTeamTask(ctx, got.ID, 2)
+	if err != nil {
+		t.Fatalf("get team task: %v", err)
+	}
+	if tt.RallyLat != rallyLat || tt.RallyLng != rallyLng {
+		t.Errorf("rally = (%f,%f), want plan's (%f,%f)", tt.RallyLat, tt.RallyLng, rallyLat, rallyLng)
+	}
+	if len(tt.Checkpoints) != 2 {
+		t.Errorf("checkpoints = %+v, want 2 from plan", tt.Checkpoints)
+	}
+	if tt.Mission != "발령임무" {
+		t.Errorf("mission = %q, want incident's own 발령임무", tt.Mission)
+	}
+	after, err := inc.ListAssignments(ctx, got.ID)
+	if err != nil {
+		t.Fatalf("list assignments: %v", err)
+	}
+	if after[0].MissionVer != before[0].MissionVer+1 {
+		t.Errorf("mission_ver = %d, want %d", after[0].MissionVer, before[0].MissionVer+1)
+	}
+
+	changed, err = inc.RefreshTeamPlan(ctx, got.ID, 2, "admin1", time.Now())
+	if err != nil || changed {
+		t.Errorf("second refresh = %v, %v; want false, nil", changed, err)
+	}
+	if changed, err := inc.RefreshTeamPlan(ctx, got.ID, 7, "admin1", time.Now()); err != nil || changed {
+		t.Errorf("refresh of a team not in the incident = %v, %v; want false, nil", changed, err)
 	}
 }

@@ -287,6 +287,12 @@ func (s *Store) SetPassword(ctx context.Context, id int64, newPassword string, m
 	if err := auth.ValidatePasswordPolicy(newPassword, m.LoginID, m.Mobile); err != nil {
 		return err
 	}
+	return s.storePassword(ctx, id, newPassword, mustChange)
+}
+
+// storePassword hashes and stores a password without the policy check.
+// Callers validate first; only the TEST_TOOLS path uses a looser rule.
+func (s *Store) storePassword(ctx context.Context, id int64, newPassword string, mustChange bool) error {
 	hash, err := s.h.Hash(newPassword)
 	if err != nil {
 		return err

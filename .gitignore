@@ -6,3 +6,4 @@
 *.db-shm
 *.env
 /test.txt
+/test_roster.xlsx

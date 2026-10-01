@@ -110,18 +110,60 @@ function renderBoard() {
   setText(els.board, '위치 확인 중');
 }
 
+// ---- Waiting for an incident ----
+let recheckTimer = null;
+function clearRecheck() {
+  if (recheckTimer) clearTimeout(recheckTimer);
+  recheckTimer = null;
+}
+function scheduleRecheck(seconds) {
+  clearRecheck();
+  const wait = Math.max(10, Number(seconds) || 60) * 1000;
+  recheckTimer = setTimeout(recheckMe, wait);
+}
+async function recheckMe() {
+  recheckTimer = null;
+  try {
+    const me = await api.get('/f/me');
+    // After an incident ends the map stays up (SPEC §8.1.5); only switch
+    // screens once there is a new task to show.
+    if (!me.task && state.st === 'CLOSED' && !els.mainView.hidden) {
+      scheduleRecheck(me.n);
+      return;
+    }
+    await loadMe(me);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      showOnly(els.loginView);
+      return;
+    }
+    scheduleRecheck(60); // network hiccup: try again later
+  }
+}
+// Coming back to the app (unlocking the phone, switching tabs) checks at
+// once instead of waiting for the timer.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && recheckTimer) recheckMe();
+});
+
 // ---- /f/me rendering ----
-async function loadMe() {
-  const me = await api.get('/f/me');
+async function loadMe(prefetched) {
+  const me = prefetched || await api.get('/f/me');
   syncServerTime(me.t);
   state.st = me.st;
   state.incident = me.incident;
 
-  if (me.st === 'IDLE' || me.st === 'NONE') {
+  if (me.st === 'IDLE' || me.st === 'NONE' || me.st === 'CLOSED' || !me.task) {
     showOnly(els.idleView);
-    setText(els.idleText, me.st === 'IDLE' ? '현재 발령이 없습니다.' : '이번 발령 대상이 아닙니다.');
+    const idleTexts = { IDLE: '현재 발령이 없습니다.', NONE: '이번 발령 대상이 아닙니다.', CLOSED: '발령이 종료되었습니다.' };
+    setText(els.idleText, idleTexts[me.st] || '현재 발령이 없습니다.');
+    // Keep asking the server: a member who logged in before the incident
+    // was opened (or before being added to it) must pick it up without
+    // reloading the page. The server suggests the interval in n (seconds).
+    scheduleRecheck(me.n);
     return;
   }
+  clearRecheck();
 
   showOnly(els.mainView);
   state.task = me.task;
@@ -246,7 +288,9 @@ function startLoopIfNeeded() {
       // the map and route buttons stay visible, only the position marker
       // and further sync calls stop.
       state.st = 'CLOSED';
+      state.loop = null; // a later incident starts a fresh loop
       renderBoard();
+      scheduleRecheck(60);
     },
   });
   state.loop.start();

@@ -52,20 +52,21 @@ func TestApplyTestAccounts(t *testing.T) {
 	applied, problems := s.ApplyTestAccounts(ctx, []TestAccount{
 		{Line: 1, LoginID: "k1234", Password: "devpass456"},
 		{Line: 2, LoginID: "nobody", Password: "devpass456"},
-		{Line: 3, LoginID: "k1234", Password: "short"},
+		{Line: 3, LoginID: "k1234", Password: "abc"},
+		{Line: 4, LoginID: "k1234", Password: "1234"}, // 4 chars is enough for test accounts
 	})
-	if applied != 1 {
-		t.Errorf("applied = %d, want 1", applied)
+	if applied != 2 {
+		t.Errorf("applied = %d, want 2", applied)
 	}
 	if len(problems) != 2 {
-		t.Fatalf("problems = %v, want 2 (unknown id, policy)", problems)
+		t.Fatalf("problems = %v, want 2 (unknown id, too short)", problems)
 	}
 
 	got, err := s.GetByID(ctx, m.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if ok, _ := h.Verify(got.PWHash, "devpass456"); !ok {
+	if ok, _ := h.Verify(got.PWHash, "1234"); !ok {
 		t.Error("password from the file was not applied")
 	}
 	if got.PWMustChange {

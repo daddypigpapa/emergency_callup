@@ -385,6 +385,72 @@ func (s *Store) UpdateTeamTask(ctx context.Context, incidentID, teamNo int64, mi
 	return nil
 }
 
+// RefreshTeamPlan re-copies a team's saved plan (rally point and
+// checkpoints) into the running incident, so a plan saved after the
+// incident opened shows up without opening a new one. Mission and area
+// are left as they are: those are changed per incident through
+// UpdateTeamTask. If the plan targets a different area than the team is
+// working in now, the defaults for the current area apply (as at open).
+//
+// Members of the team who follow the team area (no personal area
+// override) get mission_ver bumped, so their phones show the change
+// notice and reload the map. Returns false when the team isn't part of
+// the incident or nothing changed.
+func (s *Store) RefreshTeamPlan(ctx context.Context, incidentID, teamNo int64, actor string, now time.Time) (bool, error) {
+	tt, err := s.GetTeamTask(ctx, incidentID, teamNo)
+	if errors.Is(err, ErrTeamTaskNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	snap, err := s.resolveTeamSnapshot(ctx, teamNo, tt.AreaID)
+	if err != nil {
+		return false, err
+	}
+	oldCps := ""
+	if len(tt.Checkpoints) > 0 {
+		b, err := json.Marshal(tt.Checkpoints)
+		if err != nil {
+			return false, err
+		}
+		oldCps = string(b)
+	}
+	newCps := ""
+	var cpArg any
+	if snap.checkpointsJSON != nil {
+		newCps = *snap.checkpointsJSON
+		cpArg = newCps
+	}
+	if snap.rallyLat == tt.RallyLat && snap.rallyLng == tt.RallyLng && newCps == oldCps {
+		return false, nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE team_task SET version=version+1, updated_by=?, updated_at=?, rally_lat=?, rally_lng=?, checkpoints=?
+		 WHERE incident_id=? AND team_no=?`,
+		actor, now.UnixMilli(), snap.rallyLat, snap.rallyLng, cpArg, incidentID, teamNo); err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE assignment SET mission_ver=mission_ver+1
+		 WHERE incident_id=? AND team_no=? AND area_override_id IS NULL`,
+		incidentID, teamNo); err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	_ = s.audit.Record(ctx, now, audit.Event{Type: "team_task_update", Actor: actor, IncidentID: &incidentID,
+		Data: map[string]any{"teamNo": teamNo, "plan": true}})
+	return true, nil
+}
+
 // UpdateMemberOverride sets/clears one member's personal mission/area
 // override (SPEC §7.3 PUT /a/incidents/current/members/{id}). A nil pointer
 // field means "follow the team task" for that field.
